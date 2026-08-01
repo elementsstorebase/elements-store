@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elements Store - Iniciar Sesión</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts (Inter) -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Estilos personalizados -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        body {
+            background-color: var(--bg-body);
+            font-family: 'Inter', sans-serif;
+            color: var(--text-primary);
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+        .login-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            box-shadow: 0 10px 30px var(--shadow-color);
+            border-radius: 24px;
+            padding: 2.5rem;
+            width: 100%;
+            max-width: 420px;
+            transition: background-color 0.3s ease, border-color 0.3s ease;
+        }
+        .login-card h1 {
+            color: var(--text-primary);
+        }
+        .login-card .text-muted {
+            color: var(--text-secondary);
+        }
+        .login-card .input-field {
+            background-color: var(--bg-input);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 0.75rem 1rem;
+            width: 100%;
+            transition: border-color 0.2s ease, background-color 0.3s ease;
+        }
+        .login-card .input-field:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+        .login-card .input-field::placeholder {
+            color: var(--text-muted);
+        }
+        .login-card .btn-primary {
+            background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 9999px;
+            font-weight: 600;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            width: 100%;
+        }
+        .login-card .btn-primary:hover {
+            background: linear-gradient(135deg, var(--accent-hover), #4338CA);
+            box-shadow: 0 8px 20px rgba(99, 102, 241, 0.3);
+        }
+        .login-card .btn-secondary {
+            background: transparent;
+            color: var(--accent);
+            border: none;
+            font-weight: 500;
+            transition: color 0.2s ease;
+            cursor: pointer;
+        }
+        .login-card .btn-secondary:hover {
+            color: var(--accent-hover);
+            text-decoration: underline;
+        }
+        .login-card .alert {
+            padding: 0.75rem 1rem;
+            border-radius: 12px;
+            font-size: 0.9rem;
+        }
+        .login-card .alert-success {
+            background-color: #D1FAE5;
+            color: #065F46;
+            border: 1px solid #A7F3D0;
+        }
+        .login-card .alert-danger {
+            background-color: #FEE2E2;
+            color: #991B1B;
+            border: 1px solid #FCA5A5;
+        }
+        .login-card .alert-warning {
+            background-color: #FEF3C7;
+            color: #92400E;
+            border: 1px solid #FCD34D;
+        }
+        .login-card .alert-info {
+            background-color: #DBEAFE;
+            color: #1E40AF;
+            border: 1px solid #93C5FD;
+        }
+        html.dark .login-card .alert-success {
+            background-color: #064E3B;
+            color: #A7F3D0;
+            border-color: #065F46;
+        }
+        html.dark .login-card .alert-danger {
+            background-color: #7F1D1D;
+            color: #FCA5A5;
+            border-color: #991B1B;
+        }
+        html.dark .login-card .alert-warning {
+            background-color: #78350F;
+            color: #FCD34D;
+            border-color: #92400E;
+        }
+        html.dark .login-card .alert-info {
+            background-color: #1E3A5F;
+            color: #93C5FD;
+            border-color: #1E40AF;
+        }
+    </style>
+</head>
+<body>
+    <div class="min-h-screen flex items-center justify-center px-4 py-8">
+        <div class="login-card">
+            <div class="text-center mb-6">
+                <h1 class="text-3xl font-bold text-indigo-600">
+                    <i class="fas fa-store-alt mr-2"></i>Elements Store
+                </h1>
+                <p class="text-muted text-sm mt-1">Sistema de Gestión de Inventario</p>
+            </div>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }} mb-4">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <form method="POST" action="{{ url_for('main.login') }}" class="space-y-4">
+                <div>
+                    <label for="username" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        <i class="fas fa-user mr-1"></i> Usuario
+                    </label>
+                    <input type="text" id="username" name="username" required
+                           class="input-field" placeholder="Ingresa tu usuario"
+                           value="{{ request.form.get('username', '') }}">
+                </div>
+
+                <div>
+                    <label for="password" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        <i class="fas fa-lock mr-1"></i> Contraseña
+                    </label>
+                    <input type="password" id="password" name="password" required
+                           class="input-field" placeholder="Ingresa tu contraseña">
+                </div>
+
+                <button type="submit" class="btn-primary">
+                    <i class="fas fa-sign-in-alt mr-2"></i> Iniciar Sesión
+                </button>
+            </form>
+
+            <div class="mt-8 text-center text-xs text-muted">
+                <p>Elements Store v1.0 &bull; Todos los derechos reservados</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.documentElement.classList.add('dark');
+        }
+    </script>
+</body>
+</html>

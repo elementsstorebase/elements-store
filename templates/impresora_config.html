@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <!-- Título y descripción -->
+    <div class="mb-6">
+        <h2 class="text-2xl font-semibold text-gray-800 flex items-center gap-3">
+            <i class="fas fa-print text-indigo-500 text-3xl"></i>
+            Configuración de Impresora
+        </h2>
+        <p class="text-sm text-gray-500 mt-1">Configure los parámetros de impresión para tickets, facturas y comprobantes.</p>
+    </div>
+
+    <!-- Tarjeta principal -->
+    <div class="card bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+        <form id="form-impresora" class="space-y-6">
+            <!-- ============================================ -->
+            <!-- FILA 1: Nombre y Tipo (con botón Detectar) -->
+            <!-- ============================================ -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Nombre de la Impresora</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="imp-nombre" class="input-field w-full rounded-xl border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent" placeholder="Ej: EPSON TM-T20" />
+                        <button type="button" id="btn-detectar-impresoras" class="px-4 py-2 bg-indigo-100 text-indigo-700 rounded-xl hover:bg-indigo-200 transition-colors whitespace-nowrap">
+                            <i class="fas fa-search"></i> Detectar
+                        </button>
+                    </div>
+                    <div id="lista-impresoras-container" class="mt-2 hidden">
+                        <label class="block text-xs font-medium text-gray-500 mb-1">Seleccione una impresora:</label>
+                        <select id="lista-impresoras" class="input-field w-full rounded-xl border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                            <option value="">-- Seleccione --</option>
+                        </select>
+                        <p class="text-xs text-gray-400 mt-1">Al seleccionar una, se rellenará el campo "Nombre de la Impresora".</p>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-1">Nombre exacto de la impresora en el sistema (o puerto USB/COM).</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+                    <select id="imp-tipo" class="input-field w-full rounded-xl border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                        <option value="termica">Térmica</option>
+                        <option value="fiscal">Fiscal</option>
+                        <option value="laser">Láser</option>
+                        <option value="matricial">Matricial</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- ============================================ -->
+            <!-- FILA 2: Puerto y Velocidad -->
+            <!-- ============================================ -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Puerto</label>
+                    <input type="text" id="imp-puerto" class="input-field w-full rounded-xl border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent" placeholder="Ej: USB, COM1, LPT1">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Velocidad (baudios)</label>
+                    <input type="number" id="imp-velocidad" class="input-field w-full rounded-xl border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent" placeholder="9600">
+                </div>
+            </div>
+
+            <!-- ============================================ -->
+            <!-- FILA 3: Tamaño Papel y Caracteres por Línea -->
+            <!-- ============================================ -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Tamaño de Papel</label>
+                    <select id="imp-tamano" class="input-field w-full rounded-xl border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                        <option value="80mm">80 mm</option>
+                        <option value="58mm">58 mm</option>
+                        <option value="A4">A4</option>
+                        <option value="Carta">Carta</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Caracteres por Línea</label>
+                    <input type="number" id="imp-caracteres" class="input-field w-full rounded-xl border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent" placeholder="42">
+                </div>
+            </div>
+
+            <!-- ============================================ -->
+            <!-- FILA 4: Márgenes Izquierdo y Derecho -->
+            <!-- ============================================ -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Margen Izquierdo (mm)</label>
+                    <input type="number" id="imp-margen-izq" class="input-field w-full rounded-xl border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent" placeholder="0">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Margen Derecho (mm)</label>
+                    <input type="number" id="imp-margen-der" class="input-field w-full rounded-xl border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent" placeholder="0">
+                </div>
+            </div>
+
+            <!-- ============================================ -->
+            <!-- FILA 5: Fuente y Tamaño de Fuente -->
+            <!-- ============================================ -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Fuente</label>
+                    <input type="text" id="imp-fuente" class="input-field w-full rounded-xl border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent" placeholder="DejaVuSans.ttf">
+                    <p class="text-xs text-gray-400 mt-1">Nombre del archivo de fuente (.ttf) ubicado en la carpeta <strong>fonts/</strong></p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Tamaño de Fuente</label>
+                    <input type="number" id="imp-tam-fuente" class="input-field w-full rounded-xl border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent" placeholder="10">
+                </div>
+            </div>
+
+            <!-- ============================================ -->
+            <!-- FILA 6: Alineación -->
+            <!-- ============================================ -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Alineación</label>
+                <select id="imp-alineacion" class="input-field w-full rounded-xl border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                    <option value="izquierda">Izquierda</option>
+                    <option value="centrado">Centrado</option>
+                    <option value="derecha">Derecha</option>
+                </select>
+            </div>
+
+            <!-- ============================================ -->
+            <!-- FILA 7: Cabecera Extra y Pie Extra -->
+            <!-- ============================================ -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Cabecera Extra</label>
+                    <input type="text" id="imp-cabecera" class="input-field w-full rounded-xl border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent" placeholder="Texto adicional al inicio del ticket">
+                    <p class="text-xs text-gray-400 mt-1">Se imprime antes del contenido principal.</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Pie Extra</label>
+                    <input type="text" id="imp-pie" class="input-field w-full rounded-xl border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent" placeholder="Texto adicional al final del ticket">
+                    <p class="text-xs text-gray-400 mt-1">Se imprime después del contenido principal.</p>
+                </div>
+            </div>
+
+            <!-- ============================================ -->
+            <!-- FILA 8: Copias y Opciones -->
+            <!-- ============================================ -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Copias</label>
+                    <input type="number" id="imp-copias" class="input-field w-full rounded-xl border-gray-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent" placeholder="1" min="1" max="10">
+                </div>
+                <div class="flex items-center gap-4 col-span-2">
+                    <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                        <input type="checkbox" id="imp-cortar" class="w-5 h-5 text-indigo-600 rounded border-gray-300 focus:ring-2 focus:ring-indigo-500">
+                        Cortar automáticamente
+                    </label>
+                    <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                        <input type="checkbox" id="imp-abrir-cajon" class="w-5 h-5 text-indigo-600 rounded border-gray-300 focus:ring-2 focus:ring-indigo-500">
+                        Abrir cajón
+                    </label>
+                </div>
+            </div>
+
+            <!-- ============================================ -->
+            <!-- BOTONES DE ACCIÓN -->
+            <!-- ============================================ -->
+            <div class="flex flex-wrap gap-4 pt-4 border-t border-gray-100">
+                <button type="submit" class="btn-primary px-8 py-3 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-2">
+                    <i class="fas fa-save"></i> Guardar Configuración
+                </button>
+                <button type="button" id="btn-test-impresora" class="btn-secondary px-8 py-3 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-2 bg-gray-100 text-gray-700 hover:bg-gray-200">
+                    <i class="fas fa-print"></i> Prueba de Impresión
+                </button>
+                <button type="button" id="btn-cargar-default" class="px-6 py-3 rounded-xl text-sm font-medium text-gray-600 hover:text-indigo-600 transition-colors bg-gray-50 hover:bg-indigo-50 border border-gray-200">
+                    <i class="fas fa-undo-alt mr-2"></i> Cargar valores por defecto
+                </button>
+            </div>
+
+            <!-- Mensaje de estado -->
+            <div id="mensaje-impresora" class="text-sm hidden mt-2 p-3 rounded-xl"></div>
+        </form>
+    </div>
+</div>
+
+<!-- Script específico para esta página -->
+<script src="{{ url_for('static', filename='js/impresora.js') }}"></script>
+{% endblock %}

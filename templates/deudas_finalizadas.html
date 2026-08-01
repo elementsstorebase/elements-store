@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Título y botón volver -->
+    <div class="flex flex-wrap justify-between items-center gap-4">
+        <div class="flex items-center gap-3">
+            <a href="/admin/deudas" class="text-gray-400 hover:text-gray-600 transition-colors">
+                <i class="fas fa-arrow-left text-lg"></i>
+            </a>
+            <div>
+                <h2 class="text-2xl font-semibold text-gray-800">Deudas Finalizadas</h2>
+                <p class="text-sm text-gray-400">Historial de apartados pagados y reintegrados</p>
+            </div>
+        </div>
+        <span class="text-sm text-gray-500">Total: <span id="total-finalizadas" class="font-semibold">0</span></span>
+    </div>
+
+    <!-- Filtros -->
+    <div class="card">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Buscar Cliente</label>
+                <input type="text" id="filtro-cliente" class="input-field" placeholder="Nombre o cédula...">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Estado</label>
+                <select id="filtro-estado" class="input-field">
+                    <option value="">Todos</option>
+                    <option value="pagado">Pagado</option>
+                    <option value="reintegrado">Reintegrado</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Fecha Desde</label>
+                <input type="date" id="filtro-fecha-desde" class="input-field">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Fecha Hasta</label>
+                <input type="date" id="filtro-fecha-hasta" class="input-field">
+            </div>
+            <div class="md:col-span-4 flex space-x-2">
+                <button id="btn-filtrar" class="btn-primary">🔍 Filtrar</button>
+                <button id="btn-limpiar" class="btn-secondary">Limpiar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabla de deudas finalizadas -->
+    <div class="card overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="text-left text-gray-400 border-b">
+                    <th class="py-2 px-3">Cliente</th>
+                    <th class="py-2 px-3">Producto</th>
+                    <th class="py-2 px-3 text-center">Cantidad</th>
+                    <th class="py-2 px-3 text-right">Total USD</th>
+                    <th class="py-2 px-3 text-right">Total VES</th>
+                    <th class="py-2 px-3 text-center">Estado</th>
+                    <th class="py-2 px-3 text-center">Fecha Finalización</th>
+                    <th class="py-2 px-3 text-center">Acción</th>
+                </tr>
+            </thead>
+            <tbody id="tabla-finalizadas">
+                <tr><td colspan="8" class="text-center py-4 text-gray-400">Cargando historial...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal Detalle -->
+<div id="modal-detalle" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+    <div class="bg-white rounded-2xl shadow-xl max-w-4xl w-full p-6 max-h-[90vh] overflow-y-auto">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-gray-800">Detalle de Deuda Finalizada</h3>
+            <button onclick="cerrarModalDetalle()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div id="detalle-contenido">
+            <div class="text-center py-4 text-gray-400">Cargando...</div>
+        </div>
+        <div class="mt-4 flex justify-end">
+            <button onclick="cerrarModalDetalle()" class="btn-secondary">Cerrar</button>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/deudas.js') }}"></script>
+<script>
+    // Función para abrir modal de detalle (se usa desde el JS principal)
+    window.abrirModalDetalleFinalizada = function(deudaId) {
+        const modal = document.getElementById('modal-detalle');
+        const contenido = document.getElementById('detalle-contenido');
+        modal.classList.remove('hidden');
+        contenido.innerHTML = '<div class="text-center py-4 text-gray-400">Cargando detalles...</div>';
+
+        fetch(`/api/apartados/${deudaId}`)
+            .then(r => {
+                if (!r.ok) throw new Error('Error al cargar detalle');
+                return r.json();
+            })
+            .then(data => {
+                let html = '';
+                html += `<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">`;
+                html += `<div class="bg-indigo-50 p-3 rounded-lg">
+                            <h5 class="font-semibold">Cliente</h5>
+                            <p>${data.cliente.nombre} ${data.cliente.apellido}</p>
+                            <p class="text-sm text-gray-600">Cédula: ${data.cliente.cedula}</p>
+                            <p class="text-sm text-gray-600">Tel: ${data.cliente.telefono || '-'}</p>
+                        </div>`;
+                html += `<div class="bg-blue-50 p-3 rounded-lg">
+                            <h5 class="font-semibold">Producto</h5>
+                            <p>${data.producto.nombre}</p>
+                            <p class="text-sm text-gray-600">Cantidad: ${data.cantidad}</p>
+                            <p class="text-sm text-gray-600">Precio USD: $${data.precio_unitario_usd.toFixed(2)}</p>
+                        </div>`;
+                html += `</div>`;
+                html += `<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">`;
+                html += `<div class="bg-green-50 p-3 rounded-lg text-center">
+                            <p class="text-xs text-gray-400">Total Producto</p>
+                            <p class="text-xl font-bold">$${data.total_usd.toFixed(2)}</p>
+                        </div>`;
+                const totalAbonado = data.pagos.reduce((sum, p) => sum + p.monto_usd, 0) + data.abono_inicial_monto;
+                html += `<div class="bg-yellow-50 p-3 rounded-lg text-center">
+                            <p class="text-xs text-gray-400">Total Abonado</p>
+                            <p class="text-xl font-bold">$${totalAbonado.toFixed(2)}</p>
+                        </div>`;
+                html += `<div class="bg-amber-50 p-3 rounded-lg text-center">
+                            <p class="text-xs text-gray-400">Saldo Final</p>
+                            <p class="text-xl font-bold">$${data.saldo_restante.toFixed(2)}</p>
+                        </div>`;
+                html += `</div>`;
+                html += `<div class="border-t border-gray-200 pt-3">`;
+                html += `<h5 class="font-semibold mb-2">Historial de Abonos</h5>`;
+                html += `<table class="w-full text-sm">`;
+                html += `<thead><tr class="text-left text-gray-400 border-b">
+                            <th class="py-1 px-2">Fecha</th>
+                            <th class="py-1 px-2 text-right">USD</th>
+                            <th class="py-1 px-2 text-right">VES</th>
+                            <th class="py-1 px-2">Método Cobro</th>
+                            <th class="py-1 px-2">Método Pago</th>
+                        </tr></thead><tbody>`;
+                if (data.pagos.length === 0) {
+                    html += `<tr><td colspan="5" class="text-center py-2 text-gray-400">No hay abonos registrados</td></tr>`;
+                } else {
+                    data.pagos.forEach(p => {
+                        html += `<tr class="border-b border-gray-100">
+                                    <td class="py-1 px-2">${p.fecha_abono}</td>
+                                    <td class="py-1 px-2 text-right">$${p.monto_usd.toFixed(2)}</td>
+                                    <td class="py-1 px-2 text-right">Bs ${p.monto_ves.toFixed(2)}</td>
+                                    <td class="py-1 px-2">${p.metodo_cobro || '-'}</td>
+                                    <td class="py-1 px-2">${p.metodo_pago || '-'}</td>
+                                </tr>`;
+                    });
+                }
+                html += `</tbody></table>`;
+                html += `</div>`;
+                contenido.innerHTML = html;
+            })
+            .catch(err => {
+                contenido.innerHTML = `<div class="text-center py-4 text-red-400">Error al cargar detalle: ${err.message}</div>`;
+            });
+    };
+
+    window.cerrarModalDetalle = function() {
+        document.getElementById('modal-detalle').classList.add('hidden');
+    };
+
+    // Cerrar modal con Escape
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') cerrarModalDetalle();
+    });
+
+    // Cerrar modal al hacer clic fuera
+    document.getElementById('modal-detalle').addEventListener('click', function(e) {
+        if (e.target === this) cerrarModalDetalle();
+    });
+</script>
+{% endblock %}
