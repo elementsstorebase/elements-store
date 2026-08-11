@@ -1,3 +1,7 @@
+# ============================================================
+# routes.py - Elements Store (con correcciones)
+# ============================================================
+
 from flask import Blueprint, render_template, request, jsonify, current_app, send_file, session, redirect, url_for, flash
 from models import db, Producto, Marca, Categoria, Subcategoria, Talla, Cliente, Venta, DetalleVenta, Credito, Abono, Log, Configuracion, Gasto, CategoriaGasto, ReporteVenta, HistorialTasa, Usuario, Apartado, PagoApartado, CuentaFinanciera, Deuda, ConfiguracionImpresora, now_venezuela
 from utils import obtener_tasas_bcv, obtener_tasa_personalizada, calcular_precios_alternativos
@@ -19,22 +23,57 @@ main_bp = Blueprint('main', __name__)
 api_bp = Blueprint('api', __name__)
 
 # ============================================================
-# 🔥 NUEVO: FUNCIÓN PARA OBTENER EL PRÓXIMO NÚMERO DE TICKET DISPONIBLE
+# 🔥 MIGRACIÓN AUTOMÁTICA: AGREGAR COLUMNAS 'anulado' Y 'fecha_anulacion' A 'ventas'
+# ============================================================
+def agregar_columnas_venta_si_no_existen():
+    """
+    Verifica si las columnas 'anulado' y 'fecha_anulacion' existen en la tabla 'ventas'.
+    Si no, las agrega con SQL ALTER TABLE (compatible con SQLite y PostgreSQL).
+    """
+    try:
+        if not db.engine.dialect.has_table(db.engine, 'ventas'):
+            return
+        inspector = db.inspect(db.engine)
+        columns = [col['name'] for col in inspector.get_columns('ventas')]
+        
+        if 'anulado' not in columns:
+            print("🔧 Agregando columna 'anulado' a la tabla 'ventas'...")
+            if db.engine.dialect.name == 'postgresql':
+                db.session.execute("ALTER TABLE ventas ADD COLUMN anulado BOOLEAN DEFAULT FALSE")
+            else:
+                db.session.execute("ALTER TABLE ventas ADD COLUMN anulado BOOLEAN DEFAULT 0")
+            db.session.commit()
+            print("✅ Columna 'anulado' agregada.")
+        
+        if 'fecha_anulacion' not in columns:
+            print("🔧 Agregando columna 'fecha_anulacion' a la tabla 'ventas'...")
+            if db.engine.dialect.name == 'postgresql':
+                db.session.execute("ALTER TABLE ventas ADD COLUMN fecha_anulacion TIMESTAMP")
+            else:
+                db.session.execute("ALTER TABLE ventas ADD COLUMN fecha_anulacion DATETIME")
+            db.session.commit()
+            print("✅ Columna 'fecha_anulacion' agregada.")
+    except Exception as e:
+        print(f"⚠️ Error al agregar columnas a 'ventas': {e}")
+
+# Ejecutar la migración al importar el módulo
+try:
+    agregar_columnas_venta_si_no_existen()
+except:
+    pass
+
+# ============================================================
+# 🔥 MODIFICADO: FUNCIÓN PARA OBTENER EL PRÓXIMO NÚMERO DE TICKET (SECUENCIA ESTRICTA)
 # ============================================================
 def obtener_proximo_numero_ticket():
     """
-    Retorna el número de ticket más bajo disponible (el primer hueco en la secuencia).
-    Si no hay tickets, retorna 1.
+    Retorna el siguiente número de ticket (máximo + 1) sin reutilizar números eliminados.
+    Si no hay ventas, retorna 1.
     """
-    # Obtener todos los números de ticket existentes (ordenados)
-    tickets_existentes = db.session.query(Venta.numero_ticket).order_by(Venta.numero_ticket).all()
-    usados = {t[0] for t in tickets_existentes}
-    
-    # Buscar el primer número faltante desde 1 en adelante
-    n = 1
-    while n in usados:
-        n += 1
-    return n
+    max_ticket = db.session.query(func.max(Venta.numero_ticket)).scalar()
+    if max_ticket is None:
+        return 1
+    return max_ticket + 1
 # ============================================================
 
 # ============================================================
@@ -78,6 +117,7 @@ def generar_texto_ticket(venta):
     Genera el contenido en texto plano para un ticket de venta,
     basado en los datos de la venta y su configuración.
     Mejorado para soportar papel de 58mm (32 caracteres) y 80mm (42 caracteres).
+    🔥 CORRECCIÓN: La fecha se convierte a hora local de Venezuela (UTC-4).
     """
     from models import Configuracion
 
@@ -164,8 +204,16 @@ def generar_texto_ticket(venta):
         lineas.append(wrap_line(f'Dir: {direccion_tienda}'))
     lineas.append(separador_corto)
     lineas.append(centrar_linea(f'NOTA DE ENTREGA N°: {venta.numero_ticket:05d}'))
-    fecha_formateada = venta.fecha.strftime('%d/%m/%Y, %I:%M:%S %p')
+    
+    # 🔥 CORRECCIÓN: Convertir fecha a hora local de Venezuela
+    if venta.fecha.tzinfo is None:
+        fecha_utc = pytz.UTC.localize(venta.fecha)
+        fecha_local = fecha_utc.astimezone(pytz.timezone('America/Caracas'))
+    else:
+        fecha_local = venta.fecha.astimezone(pytz.timezone('America/Caracas'))
+    fecha_formateada = fecha_local.strftime('%d/%m/%Y, %I:%M:%S %p')
     fecha_formateada = fecha_formateada.replace('AM', 'a. m.').replace('PM', 'p. m.')
+    
     lineas.append(wrap_line(f'Fecha: {fecha_formateada}'))
     lineas.append(separador)
     if cliente:
@@ -267,6 +315,7 @@ def generar_texto_ticket(venta):
 # ============================================================
 # NUEVAS FUNCIONES PARA TICKET POS-58 CON TODAS LAS BANDERAS
 # (Corregidas: encabezado centrado, sin prefijos, fecha 12h, IVA sumado)
+# 🔥 AHORA RECIBE LA FECHA YA CONVERTIDA A LOCAL (desde los puntos de llamada)
 # ============================================================
 
 def sanitizar_texto(texto):
@@ -300,7 +349,7 @@ def generar_ticket_pos58(datos_venta, config_ticket, max_chars=32):
     respetando dinámicamente la configuración del módulo 'Ticket Virtual'.
     CORREGIDO:
     - encabezado centrado sin prefijos
-    - fecha 12h con AM/PM
+    - fecha 12h con AM/PM (ya debe venir en datos_venta['fecha_hora_12h'] convertida a local)
     - IVA sumado al total VES
     - subtotal_usd obtenido de forma segura con float() y default 0.0
     - indicador de oferta/descuento en el nombre del producto
@@ -323,11 +372,9 @@ def generar_ticket_pos58(datos_venta, config_ticket, max_chars=32):
         ticket.append(sanitizar_texto(config_ticket.get('rif')).center(ANCHO) + "\n")
         
     if config_ticket.get('mostrar_telefono', True) and config_ticket.get('telefono_tienda'):
-        # Centrado directo sin "Tel:"
         ticket.append(sanitizar_texto(config_ticket.get('telefono_tienda')).center(ANCHO) + "\n")
         
     if config_ticket.get('mostrar_direccion_tienda', True) and config_ticket.get('direccion_tienda'):
-        # Centrado directo sin "Dir:"
         dir_empresa = sanitizar_texto(config_ticket.get('direccion_tienda'))
         for linea in textwrap.wrap(dir_empresa, width=ANCHO):
             ticket.append(linea.center(ANCHO) + "\n")
@@ -2081,7 +2128,7 @@ def reactivar_cliente(id):
 
 # ============================================================
 # API: VENTAS (PROTEGIDA) - CORREGIDO: TOTAL VES = SUBTOTAL + IVA
-# 🔥 MODIFICADO: uso de obtener_proximo_numero_ticket()
+# 🔥 MODIFICADO: uso de obtener_proximo_numero_ticket() (secuencia estricta)
 # 🔥 MODIFICADO: lógica mejorada para asignar cliente basado en datos del formulario
 # ============================================================
 
@@ -2166,7 +2213,7 @@ def registrar_venta():
             if not cliente:
                 return jsonify({'error': 'Cliente no encontrado'}), 404
 
-    # 🔥 NUEVO: Obtener el próximo número de ticket disponible
+    # 🔥 NUEVO: Obtener el próximo número de ticket (secuencia estricta)
     nuevo_ticket = obtener_proximo_numero_ticket()
     
     # Opcional: actualizar Configuracion para compatibilidad
@@ -2290,7 +2337,8 @@ def registrar_venta():
         subtotal_usd=subtotal_usd,
         subtotal_ves=subtotal_ves,  # ← BASE IMPONIBLE SIN IVA
         es_apartado=es_apartado,
-        apartado_id=apartado_id
+        apartado_id=apartado_id,
+        anulado=False  # 🔥 NUEVO: por defecto no anulada
     )
     db.session.add(venta)
     db.session.flush()
@@ -2349,7 +2397,7 @@ def registrar_venta():
     db.session.commit()
 
     # ============================================================
-    # 🔥 IMPRESIÓN AUTOMÁTICA CON NUEVO GENERADOR POS-58
+    # 🔥 IMPRESIÓN AUTOMÁTICA CON NUEVO GENERADOR POS-58 (FECHA LOCAL)
     # ============================================================
     try:
         config_imp = ConfiguracionImpresora.query.first()
@@ -2385,14 +2433,12 @@ def registrar_venta():
         # ============================================================
         # 🔥 OBTENER DATOS DEL CLIENTE DESDE EL JSON (prioridad) O DE LA BD
         # ============================================================
-        # Usamos el cliente que ya tenemos (que es el correcto después de la nueva lógica)
         cliente = venta.cliente
         cliente_nombre = data.get('cliente_nombre', '').strip()
         cliente_cedula = data.get('cliente_cedula', '').strip()
         cliente_telefono = data.get('cliente_telefono', '').strip()
         cliente_direccion = data.get('cliente_direccion', '').strip()
 
-        # Si no se enviaron campos, usar los de la base de datos
         if not cliente_nombre:
             cliente_nombre = f"{cliente.nombre} {cliente.apellido}" if cliente else "Consumidor Final"
         if not cliente_cedula:
@@ -2404,7 +2450,14 @@ def registrar_venta():
 
         detalles = DetalleVenta.query.filter_by(venta_id=venta.id).all()
 
-        fecha_12h = venta.fecha.strftime('%d/%m/%Y %I:%M %p')
+        # 🔥 CONVERTIR FECHA A LOCAL
+        if venta.fecha.tzinfo is None:
+            fecha_utc = pytz.UTC.localize(venta.fecha)
+            fecha_local = fecha_utc.astimezone(pytz.timezone('America/Caracas'))
+        else:
+            fecha_local = venta.fecha.astimezone(pytz.timezone('America/Caracas'))
+        fecha_12h = fecha_local.strftime('%d/%m/%Y %I:%M %p')
+
         datos_venta = {
             'num_nota': f"{venta.numero_ticket:05d}",
             'fecha_hora_12h': fecha_12h,
@@ -2427,7 +2480,7 @@ def registrar_venta():
                 'cantidad': det.cantidad,
                 'precio_unitario': det.precio_unitario_usd,
                 'total': det.precio_unitario_usd * det.cantidad,
-                'descuento_porcentaje': det.descuento_porcentaje or 0  # 🔥 Enviar descuento para el ticket
+                'descuento_porcentaje': det.descuento_porcentaje or 0
             })
 
         texto_ticket = generar_ticket_pos58(datos_venta, config_ticket, max_chars)
@@ -2452,7 +2505,7 @@ def registrar_venta():
     }), 201
 
 # ============================================================
-# API: LISTAR VENTAS (PROTEGIDA) - 🔥 CORRECCIÓN ZONA HORARIA
+# API: LISTAR VENTAS (PROTEGIDA) - 🔥 CORRECCIÓN ZONA HORARIA Y FILTRO ANULADAS
 # ============================================================
 
 @api_bp.route('/ventas', methods=['GET'])
@@ -2461,8 +2514,12 @@ def listar_ventas():
     numero_ticket = request.args.get('numero_ticket')
     fecha_desde = request.args.get('fecha_desde')
     fecha_hasta = request.args.get('fecha_hasta')
+    incluir_anulados = request.args.get('incluir_anulados', 'false').lower() == 'true'
 
     query = Venta.query
+    # 🔥 FILTRO: por defecto excluir anuladas
+    if not incluir_anulados:
+        query = query.filter(Venta.anulado == False)
 
     if numero_ticket:
         try:
@@ -2509,7 +2566,8 @@ def listar_ventas():
             'moneda_cobro': v.moneda_cobro,
             'total_cobro': v.total_cobro,
             'ticket_imagen': v.ticket_imagen,
-            'es_apartado': v.es_apartado
+            'es_apartado': v.es_apartado,
+            'anulado': v.anulado  # 🔥 NUEVO
         })
     return jsonify(result)
 
@@ -2564,11 +2622,49 @@ def detalle_venta(venta_id):
         'total_cobro': venta.total_cobro,
         'ticket_imagen': venta.ticket_imagen,
         'es_apartado': venta.es_apartado,
+        'anulado': venta.anulado,  # 🔥 NUEVO
         'items': items
     })
 
 # ============================================================
-# 🔥 NUEVO: ELIMINAR VENTA (DELETE)
+# 🔥 NUEVO ENDPOINT: ANULAR VENTA (con reintegro de stock)
+# ============================================================
+@api_bp.route('/ventas/<int:venta_id>/anular', methods=['POST'])
+@login_required
+def anular_venta(venta_id):
+    """Anula una venta: marca como anulada, reintegra stock y registra log."""
+    venta = Venta.query.get_or_404(venta_id)
+    
+    if venta.anulado:
+        return jsonify({'error': 'La venta ya está anulada'}), 400
+    
+    # Reintegrar stock de cada producto (solo si no es apartado, porque el apartado ya gestiona su stock)
+    detalles = DetalleVenta.query.filter_by(venta_id=venta_id).all()
+    for detalle in detalles:
+        producto = Producto.query.get(detalle.producto_id)
+        if producto and not venta.es_apartado:
+            producto.stock += detalle.cantidad
+            db.session.add(producto)
+    
+    # Marcar como anulada
+    venta.anulado = True
+    venta.fecha_anulacion = now_venezuela()
+    
+    # Registrar log
+    log = Log(
+        accion='ANULAR_VENTA',
+        detalle=f'Venta #{venta_id} (Ticket {venta.numero_ticket}) anulada. Stock reintegrado.'
+    )
+    db.session.add(log)
+    
+    db.session.commit()
+    
+    return jsonify({
+        'mensaje': f'Venta #{venta_id} anulada correctamente. Stock reintegrado.'
+    }), 200
+
+# ============================================================
+# 🔥 NUEVO: ELIMINAR VENTA (DELETE) - se mantiene como estaba
 # ============================================================
 @api_bp.route('/ventas/<int:venta_id>', methods=['DELETE'])
 @login_required
@@ -2647,7 +2743,8 @@ def historial_ventas_producto(producto_id):
             'total_venta_ves': venta.total_ves,
             'descuento_porcentaje': detalle.descuento_porcentaje if detalle.descuento_porcentaje is not None else 0,
             'precio_original_usd': detalle.precio_original_usd if detalle.precio_original_usd is not None else detalle.precio_unitario_usd,
-            'es_apartado': venta.es_apartado
+            'es_apartado': venta.es_apartado,
+            'anulado': venta.anulado  # 🔥 NUEVO
         })
 
     return jsonify(result)
@@ -3223,9 +3320,9 @@ def resumen_reportes():
     fecha_hasta = request.args.get('fecha_hasta')
 
     # ============================================================
-    # 🔧 1. OBTENER VENTAS NORMALES (excluyendo apartados)
+    # 🔧 1. OBTENER VENTAS NORMALES (excluyendo apartados y anuladas)
     # ============================================================
-    ventas_query = Venta.query.filter(Venta.es_apartado == False)
+    ventas_query = Venta.query.filter(Venta.es_apartado == False, Venta.anulado == False)
     gastos_query = Gasto.query
     desde = None
     hasta = None
@@ -3342,7 +3439,7 @@ def resumen_reportes():
     # ============================================================
     # (func y or_ ya importados arriba)
 
-    # Top productos en USD (ventas normales con moneda_cobro='USD')
+    # Top productos en USD (ventas normales con moneda_cobro='USD' y no anuladas)
     top_productos_usd_query = db.session.query(
         Producto.nombre,
         func.sum(DetalleVenta.cantidad).label('vendido'),
@@ -3350,6 +3447,7 @@ def resumen_reportes():
     ).join(DetalleVenta, DetalleVenta.producto_id == Producto.id)\
      .join(Venta, Venta.id == DetalleVenta.venta_id)\
      .filter(Venta.es_apartado == False)\
+     .filter(Venta.anulado == False)\
      .filter(Venta.moneda_cobro == 'USD')\
      .filter(Venta.fecha >= (desde if fecha_desde else datetime(2000,1,1)))\
      .filter(Venta.fecha < (hasta if fecha_hasta else datetime(2100,1,1)))\
@@ -3365,7 +3463,7 @@ def resumen_reportes():
             'total': round(row.total, 2)
         })
 
-    # Top productos en VES (ventas normales con moneda_cobro='VES')
+    # Top productos en VES (ventas normales con moneda_cobro='VES' y no anuladas)
     top_productos_ves_query = db.session.query(
         Producto.nombre,
         func.sum(DetalleVenta.cantidad).label('vendido'),
@@ -3373,6 +3471,7 @@ def resumen_reportes():
     ).join(DetalleVenta, DetalleVenta.producto_id == Producto.id)\
      .join(Venta, Venta.id == DetalleVenta.venta_id)\
      .filter(Venta.es_apartado == False)\
+     .filter(Venta.anulado == False)\
      .filter(Venta.moneda_cobro == 'VES')\
      .filter(Venta.fecha >= (desde if fecha_desde else datetime(2000,1,1)))\
      .filter(Venta.fecha < (hasta if fecha_hasta else datetime(2100,1,1)))\
@@ -3480,7 +3579,7 @@ def dashboard_metricas():
     fin_mes = (inicio_mes + timedelta(days=32)).replace(day=1)
 
     def total_ventas_periodo(inicio, fin):
-        ventas = Venta.query.filter(Venta.fecha >= inicio, Venta.fecha < fin).all()
+        ventas = Venta.query.filter(Venta.fecha >= inicio, Venta.fecha < fin, Venta.anulado == False).all()
         total_usd = sum(v.total_usd for v in ventas if v.moneda_cobro == 'USD')
         total_ves = sum(v.total_ves for v in ventas if v.moneda_cobro == 'VES')
         return {'usd': total_usd, 'ves': total_ves}
@@ -4191,7 +4290,7 @@ def agregar_pago_apartado(id):
 
 # ============================================================
 # 🔥 ENDPOINT FINALIZAR APARTADO (CORREGIDO: TOTAL VES = SUBTOTAL + IVA)
-# 🔥 MODIFICADO: uso de obtener_proximo_numero_ticket()
+# 🔥 MODIFICADO: uso de obtener_proximo_numero_ticket() (secuencia estricta)
 # ============================================================
 @api_bp.route('/apartados/<int:id>/finalizar', methods=['POST'])
 @login_required
@@ -4222,7 +4321,7 @@ def finalizar_apartado(id):
         metodo_cobro = apartado.metodo_cobro_inicial
         metodo_pago = apartado.metodo_pago_inicial
     
-    # 🔥 NUEVO: Obtener el próximo número de ticket disponible
+    # 🔥 NUEVO: Obtener el próximo número de ticket (secuencia estricta)
     nuevo_ticket = obtener_proximo_numero_ticket()
     
     # Opcional: actualizar Configuracion para compatibilidad
@@ -4290,7 +4389,8 @@ def finalizar_apartado(id):
         subtotal_usd=subtotal_usd,
         subtotal_ves=subtotal_ves,   # ← BASE IMPONIBLE
         es_apartado=True,
-        apartado_id=apartado.id
+        apartado_id=apartado.id,
+        anulado=False  # 🔥 NUEVO
     )
     db.session.add(venta)
     db.session.flush()
@@ -4330,7 +4430,7 @@ def finalizar_apartado(id):
     db.session.commit()
     
     # ============================================================
-    # 🔥 IMPRESIÓN AUTOMÁTICA CON NUEVO GENERADOR POS-58
+    # 🔥 IMPRESIÓN AUTOMÁTICA CON NUEVO GENERADOR POS-58 (FECHA LOCAL)
     # ============================================================
     try:
         config_imp = ConfiguracionImpresora.query.first()
@@ -4382,7 +4482,15 @@ def finalizar_apartado(id):
             cliente_direccion = cliente.direccion if cliente else ""
 
         detalles = DetalleVenta.query.filter_by(venta_id=venta.id).all()
-        fecha_12h = venta.fecha.strftime('%d/%m/%Y %I:%M %p')
+
+        # 🔥 CONVERTIR FECHA A LOCAL
+        if venta.fecha.tzinfo is None:
+            fecha_utc = pytz.UTC.localize(venta.fecha)
+            fecha_local = fecha_utc.astimezone(pytz.timezone('America/Caracas'))
+        else:
+            fecha_local = venta.fecha.astimezone(pytz.timezone('America/Caracas'))
+        fecha_12h = fecha_local.strftime('%d/%m/%Y %I:%M %p')
+
         datos_venta = {
             'num_nota': f"{venta.numero_ticket:05d}",
             'fecha_hora_12h': fecha_12h,
@@ -4732,9 +4840,9 @@ def reportes_globales():
         hasta = datetime.strptime(fecha_hasta, '%Y-%m-%d') + timedelta(days=1)
     
     # ============================================================
-    # 🔧 1. VENTAS NORMALES (excluyendo apartados)
+    # 🔧 1. VENTAS NORMALES (excluyendo apartados y anuladas)
     # ============================================================
-    ventas_query = Venta.query.filter(Venta.es_apartado == False)
+    ventas_query = Venta.query.filter(Venta.es_apartado == False, Venta.anulado == False)
     if desde:
         ventas_query = ventas_query.filter(Venta.fecha >= desde)
     if hasta:
@@ -4849,7 +4957,7 @@ def reportes_globales():
     ventas_por_dia_usd = {}
     ventas_por_dia_ves = {}
     
-    # Ventas normales
+    # Ventas normales (no anuladas)
     for v in ventas:
         dia = v.fecha.strftime('%Y-%m-%d')
         if v.moneda_cobro == 'USD':
@@ -4879,7 +4987,7 @@ def reportes_globales():
     global_ves_totals = defaultdict(float)
     global_ves_counts = defaultdict(int)
     
-    # Ventas USD
+    # Ventas USD (no anuladas)
     ventas_usd_detalle = db.session.query(
         Producto.nombre,
         func.sum(DetalleVenta.cantidad).label('cantidad'),
@@ -4887,6 +4995,7 @@ def reportes_globales():
     ).join(DetalleVenta, DetalleVenta.producto_id == Producto.id)\
      .join(Venta, Venta.id == DetalleVenta.venta_id)\
      .filter(Venta.es_apartado == False)\
+     .filter(Venta.anulado == False)\
      .filter(Venta.moneda_cobro == 'USD')\
      .filter(Venta.fecha >= (desde if fecha_desde else datetime(2000,1,1)))\
      .filter(Venta.fecha < (hasta if fecha_hasta else datetime(2100,1,1)))\
@@ -4913,7 +5022,7 @@ def reportes_globales():
         global_usd_totals[row.nombre] += row.total
         global_usd_counts[row.nombre] += int(row.cantidad)
     
-    # Ventas VES
+    # Ventas VES (no anuladas)
     ventas_ves_detalle = db.session.query(
         Producto.nombre,
         func.sum(DetalleVenta.cantidad).label('cantidad'),
@@ -4921,6 +5030,7 @@ def reportes_globales():
     ).join(DetalleVenta, DetalleVenta.producto_id == Producto.id)\
      .join(Venta, Venta.id == DetalleVenta.venta_id)\
      .filter(Venta.es_apartado == False)\
+     .filter(Venta.anulado == False)\
      .filter(Venta.moneda_cobro == 'VES')\
      .filter(Venta.fecha >= (desde if fecha_desde else datetime(2000,1,1)))\
      .filter(Venta.fecha < (hasta if fecha_hasta else datetime(2100,1,1)))\
@@ -5080,7 +5190,8 @@ def detalle_ventas():
     ).join(Venta, Venta.id == DetalleVenta.venta_id)\
      .join(Producto, Producto.id == DetalleVenta.producto_id)\
      .outerjoin(Cliente, Cliente.id == Venta.cliente_id)\
-     .filter(Venta.es_apartado == False)
+     .filter(Venta.es_apartado == False)\
+     .filter(Venta.anulado == False)  # 🔥 Excluir anuladas
     
     if desde:
         query = query.filter(Venta.fecha >= desde)

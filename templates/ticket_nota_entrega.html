@@ -228,8 +228,8 @@
             {% if cliente and cliente.telefono %}
                 <div><span class="bold">Teléfono:</span> {{ cliente.telefono }}</div>
             {% endif %}
-            <!-- 🔥 DIRECCIÓN FORZADA: se muestra SIEMPRE que el cliente tenga dirección, sin importar la configuración -->
-            {% if cliente and cliente.direccion %}
+            <!-- 🔥 DIRECCIÓN: se muestra SOLO si la configuración lo permite Y el cliente tiene dirección -->
+            {% if cliente and cliente.direccion and config_ticket.mostrar_direccion_cliente %}
                 <div><span class="bold">Dirección:</span> {{ cliente.direccion }}</div>
             {% endif %}
             <div class="separator-simple"></div>
@@ -328,7 +328,8 @@
         </div>
     </div>
 
-    <!-- 🔥 BLOQUE DE DEPURACIÓN (solo visible en pantalla) -->
+    <!-- 🔥 BLOQUE DE DEPURACIÓN (solo visible en pantalla) - Eliminado para versión final -->
+    <!--
     <div class="debug-info">
         <strong>🔍 Depuración del ticket:</strong><br>
         ¿Cliente existe? {{ 'Sí' if cliente else 'No' }}<br>
@@ -336,6 +337,7 @@
         Configuración mostrar_direccion_cliente: {{ config_ticket.mostrar_direccion_cliente }}<br>
         (Esta información solo se muestra en pantalla, no en impresión)
     </div>
+    -->
 
     <!-- Botones de control (no se imprimen) -->
     <div class="no-imprimir">

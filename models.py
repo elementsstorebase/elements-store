@@ -108,6 +108,9 @@ class Venta(db.Model):
     ticket_imagen = db.Column(db.String(200))
     es_apartado = db.Column(db.Boolean, default=False)
     apartado_id = db.Column(db.Integer, db.ForeignKey('apartados.id'), nullable=True)
+    # 🔥 NUEVOS CAMPOS PARA ANULACIÓN (agregados)
+    anulado = db.Column(db.Boolean, default=False, nullable=False)
+    fecha_anulacion = db.Column(db.DateTime, nullable=True)
     detalles = db.relationship('DetalleVenta', backref='venta', lazy=True, cascade='all, delete-orphan')
 
 class DetalleVenta(db.Model):
