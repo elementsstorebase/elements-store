@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <div class="card">
+        <div class="flex items-center gap-3 mb-6">
+            <a href="/admin/clientes" class="text-gray-400 hover:text-gray-600 transition-colors">
+                <i class="fas fa-arrow-left text-lg"></i>
+            </a>
+            <h3 class="text-xl font-semibold text-gray-800">Nuevo Cliente Fijo</h3>
+        </div>
+
+        <form id="form-cliente-crear" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Nombre -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Nombre <span class="text-red-500">*</span></label>
+                <input type="text" id="cliente-nombre" class="input-field" placeholder="Nombre del cliente" required>
+            </div>
+
+            <!-- Apellido -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Apellido <span class="text-red-500">*</span></label>
+                <input type="text" id="cliente-apellido" class="input-field" placeholder="Apellido del cliente" required>
+            </div>
+
+            <!-- Cédula -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Cédula / RIF <span class="text-red-500">*</span></label>
+                <input type="text" id="cliente-cedula" class="input-field" placeholder="Ej: 12.345.678" required>
+            </div>
+
+            <!-- Teléfono -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Teléfono</label>
+                <input type="text" id="cliente-telefono" class="input-field" placeholder="Ej: 0412-1234567">
+            </div>
+
+            <!-- Dirección (ocupa 2 columnas) -->
+            <div class="md:col-span-2">
+                <label class="block text-sm font-medium text-gray-700">Dirección</label>
+                <input type="text" id="cliente-direccion" class="input-field" placeholder="Dirección de residencia o negocio">
+            </div>
+
+            <!-- Campos ocultos para el backend -->
+            <input type="hidden" id="cliente-es-fijo" value="true">
+
+            <!-- Botones -->
+            <div class="md:col-span-2 flex space-x-3 mt-4">
+                <button type="submit" class="btn-primary flex-1">
+                    <i class="fas fa-save mr-1"></i> Guardar Cliente
+                </button>
+                <a href="/admin/clientes" class="btn-secondary flex-1 text-center">
+                    Cancelar
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/clientes.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <h3 class="text-xl font-semibold mb-4">Registro de Entrada de Productos</h3>
+    <form id="form-entrada" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Nombre del Producto con autocompletado -->
+        <div class="relative">
+            <label class="block text-sm font-medium text-gray-700">Nombre del Producto</label>
+            <input type="text" id="nombre" class="input-field" placeholder="Escribe para buscar..." autocomplete="off">
+            <div id="sugerencias" class="absolute z-10 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 hidden max-h-60 overflow-y-auto"></div>
+        </div>
+
+        <!-- Marca (se filtra según categoría) -->
+        <div>
+            <label class="block text-sm font-medium text-gray-700">Marca</label>
+            <select id="marca" class="input-field">
+                <option value="">Seleccionar</option>
+            </select>
+        </div>
+
+        <!-- Categoría -->
+        <div>
+            <label class="block text-sm font-medium text-gray-700">Categoría</label>
+            <select id="categoria" class="input-field">
+                <option value="">Seleccionar</option>
+            </select>
+        </div>
+
+        <!-- Subcategoría -->
+        <div>
+            <label class="block text-sm font-medium text-gray-700">Subcategoría</label>
+            <select id="subcategoria" class="input-field">
+                <option value="">Seleccionar</option>
+            </select>
+        </div>
+
+        <!-- Talla -->
+        <div>
+            <label class="block text-sm font-medium text-gray-700">Talla</label>
+            <select id="talla" class="input-field">
+                <option value="">Seleccionar talla</option>
+            </select>
+        </div>
+
+        <!-- NUEVO: Costo (USD) -->
+        <div>
+            <label class="block text-sm font-medium text-gray-700">Costo (USD)</label>
+            <input type="number" id="costo_usd" step="0.01" class="input-field" placeholder="¿Cuánto te costó este producto?" required>
+        </div>
+
+        <!-- Precio USD -->
+        <div>
+            <label class="block text-sm font-medium text-gray-700">Precio (USD)</label>
+            <input type="number" id="precio_usd" step="0.01" class="input-field" required>
+        </div>
+
+        <!-- Precios calculados (3 tasas) -->
+        <div>
+            <label class="block text-sm font-medium text-gray-700">Precio VES (Tasa USD BCV)</label>
+            <input type="text" id="precio_ves_bcv_usd" class="input-field" readonly>
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700">Precio VES (Tasa EUR BCV)</label>
+            <input type="text" id="precio_ves_bcv_eur" class="input-field" readonly>
+        </div>
+        <div>
+            <label class="block text-sm font-medium text-gray-700">Precio VES (Personalizada)</label>
+            <input type="text" id="precio_ves_personalizada" class="input-field" readonly>
+        </div>
+
+        <!-- Stock -->
+        <div>
+            <label class="block text-sm font-medium text-gray-700">Cantidad</label>
+            <input type="number" id="stock" class="input-field" required>
+        </div>
+
+        <!-- Control de serial -->
+        <div class="flex items-center space-x-2">
+            <input type="checkbox" id="control_serial">
+            <label for="control_serial" class="text-sm font-medium text-gray-700">Control de Serial</label>
+        </div>
+        <div id="serial_div" style="display:none;">
+            <label class="block text-sm font-medium text-gray-700">Número de Serial</label>
+            <input type="text" id="serial_number" class="input-field">
+        </div>
+
+        <!-- Botones -->
+        <div class="col-span-2 flex space-x-4 mt-4">
+            <button type="submit" class="btn-primary">Registrar Producto</button>
+            <button type="reset" id="btn-limpiar" class="btn-secondary" style="background:#E2E8F0; padding:0.6rem 1.5rem; border-radius:9999px;">Limpiar</button>
+        </div>
+    </form>
+</div>
+
+<script src="{{ url_for('static', filename='js/entrada.js') }}"></script>
+{% endblock %}
