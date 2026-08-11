@@ -9,6 +9,7 @@ import time  # 🔥 AÑADIDO para time.tzset()
 import pytz  # 🔥 AÑADIDO para manejo de zona horaria
 from dotenv import load_dotenv
 from werkzeug.security import generate_password_hash
+from sqlalchemy import text  # 🔥 NUEVO: para ejecutar SQL crudo en PostgreSQL
 
 # ---------- CONFIGURACIÓN DE ZONA HORARIA VENEZUELA (UTC-4) ----------
 os.environ['TZ'] = 'America/Caracas'
@@ -75,7 +76,7 @@ app.register_blueprint(api_bp, url_prefix='/api')
 # ============================================
 
 def agregar_columna_si_no_existe(tabla, columna, tipo):
-    """Agrega una columna a una tabla si no existe."""
+    """Agrega una columna a una tabla si no existe (solo SQLite)."""
     db_full_path = get_db_path()
     if not os.path.exists(db_full_path):
         return
@@ -94,6 +95,50 @@ def agregar_columna_si_no_existe(tabla, columna, tipo):
         conn.close()
     except Exception as e:
         print(f"⚠️ Error al agregar columna: {e}")
+
+# ============================================================
+# 🔥 NUEVA: Migración para PostgreSQL (columna activo en clientes)
+# ============================================================
+def migrar_columna_activo_postgres():
+    """Agrega la columna 'activo' a la tabla 'clientes' si no existe (PostgreSQL)."""
+    try:
+        # Verificar si la columna existe consultando information_schema
+        query_check = text("""
+            SELECT EXISTS (
+                SELECT 1 
+                FROM information_schema.columns 
+                WHERE table_name='clientes' AND column_name='activo'
+            );
+        """)
+        result = db.session.execute(query_check).scalar()
+        if result:
+            print("✅ La columna 'activo' ya existe en la tabla 'clientes' (PostgreSQL).")
+            return
+        
+        # Si no existe, agregarla
+        print("🔧 Agregando columna 'activo' a la tabla 'clientes' (PostgreSQL)...")
+        query_alter = text("""
+            ALTER TABLE clientes ADD COLUMN activo BOOLEAN DEFAULT TRUE NOT NULL;
+        """)
+        db.session.execute(query_alter)
+        db.session.commit()
+        print("✅ Columna 'activo' agregada exitosamente (PostgreSQL).")
+    except Exception as e:
+        db.session.rollback()
+        print(f"⚠️ Error al migrar columna 'activo' en PostgreSQL: {e}")
+
+# ============================================================
+# 🔥 NUEVA: Migración unificada para ambos motores
+# ============================================================
+def migrar_columna_activo():
+    """Agrega la columna 'activo' a clientes usando el motor correspondiente."""
+    db_uri = app.config['SQLALCHEMY_DATABASE_URI']
+    if db_uri.startswith('sqlite'):
+        # Usar la función existente para SQLite
+        agregar_columna_si_no_existe('clientes', 'activo', 'BOOLEAN DEFAULT 1 NOT NULL')
+    else:
+        # Asumir PostgreSQL (o cualquier otro que no sea SQLite)
+        migrar_columna_activo_postgres()
 
 def verificar_y_migrar_usuarios():
     """Verifica que la tabla usuarios tenga todas las columnas necesarias."""
@@ -119,7 +164,7 @@ def verificar_y_migrar_ventas_clientes():
     agregar_columna_si_no_existe('ventas', 'es_apartado', 'BOOLEAN DEFAULT 0')
     agregar_columna_si_no_existe('ventas', 'apartado_id', 'INTEGER')
     
-    # Clientes: es_fijo
+    # Clientes: es_fijo (ya no agregamos 'activo' aquí porque lo hacemos en migrar_columna_activo)
     agregar_columna_si_no_existe('clientes', 'es_fijo', 'BOOLEAN DEFAULT 0')
 
 def crear_tablas_apartados():
@@ -378,6 +423,10 @@ with app.app_context():
     # 1. Crear todas las tablas (incluyendo Usuario si es nuevo)
     db.create_all()
     print("✅ Base de datos verificada/creada con SQLAlchemy.")
+    
+    # 🔥 MIGRACIÓN PRIORITARIA: agregar columna 'activo' en clientes
+    # Esto debe ejecutarse SIEMPRE, independientemente del motor
+    migrar_columna_activo()
     
     # Solo ejecutar migraciones específicas de SQLite si se usa SQLite localmente
     if app.config['SQLALCHEMY_DATABASE_URI'].startswith('sqlite'):
