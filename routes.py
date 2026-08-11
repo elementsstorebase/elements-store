@@ -774,7 +774,7 @@ def config_impresora():
     return render_template('impresora_config.html')
 
 # ============================================================
-# 🔥 NUEVA RUTA PARA TICKET HTML (IMPRESIÓN DESDE NAVEGADOR)
+# 🔥 RUTA PARA TICKET HTML (IMPRESIÓN DESDE NAVEGADOR) - MODIFICADA
 # ============================================================
 
 @main_bp.route('/ventas/ticket/<int:venta_id>')
@@ -814,11 +814,24 @@ def ticket_nota_entrega(venta_id):
         'url_web': configs_ticket.get('ticket_url', 'www.elementsstore.com')
     }
     
+    # ============================================================
+    # 🔥 ENMASCARAMIENTO DE TASA PERSONALIZADA
+    # ============================================================
+    metodo_cobro = venta.metodo_cobro
+    if metodo_cobro in ['personalizada', 'bs_personalizado', 'usd_personalizado']:
+        metodo_mostrar = 'Tasa BCV USD'
+        tasa_mostrar = venta.tasa_bcv_usd  # Tasa oficial del día
+    else:
+        metodo_mostrar = metodo_cobro
+        tasa_mostrar = venta.tasa_aplicada
+    
     return render_template('ticket_nota_entrega.html', 
                            venta=venta, 
                            detalles=detalles, 
                            cliente=cliente,
-                           config_ticket=config_ticket)
+                           config_ticket=config_ticket,
+                           metodo_mostrar=metodo_mostrar,
+                           tasa_mostrar=tasa_mostrar)
 
 # ============================================================
 # AUTENTICACIÓN: LOGIN Y LOGOUT (SIN REGISTRO PÚBLICO)
@@ -1932,32 +1945,31 @@ def actualizar_cliente(id):
 def eliminar_cliente(id):
     cliente = Cliente.query.get_or_404(id)
     
-    # Verificar dependencias
-    dependencias = []
+    # ============================================================
+    # 🔥 VALIDACIÓN SOLO PARA APARTADOS ACTIVOS CON SALDO PENDIENTE
+    # ============================================================
+    apartados_activos = Apartado.query.filter_by(cliente_id=id, estado='activo').all()
+    apartados_con_saldo = [a for a in apartados_activos if a.saldo_restante > 0]
     
-    # Apartados activos
-    if Apartado.query.filter_by(cliente_id=id, estado='activo').first():
-        dependencias.append('tiene apartados activos')
-    
-    # Ventas
-    if Venta.query.filter_by(cliente_id=id).first():
-        dependencias.append('tiene ventas asociadas')
-    
-    # Créditos
-    if Credito.query.filter_by(cliente_id=id).first():
-        dependencias.append('tiene créditos asociados')
-    
-    if dependencias:
+    if apartados_con_saldo:
+        detalles = []
+        for a in apartados_con_saldo:
+            detalles.append(f"#{a.id} (${a.saldo_restante:.2f} pendiente)")
         return jsonify({
-            'error': f'No se puede eliminar el cliente porque {", ".join(dependencias)}.'
+            'error': f'No se puede eliminar el cliente porque tiene apartados activos con saldo pendiente: {", ".join(detalles)}. '
+                     'Primero debe finalizar o cancelar estos apartados.'
         }), 400
     
+    # ============================================================
+    # 🔥 ELIMINAR CLIENTE (incluso si tiene ventas o créditos históricos)
+    # ============================================================
     try:
         db.session.delete(cliente)
         db.session.commit()
         return jsonify({'mensaje': 'Cliente eliminado correctamente'})
     except Exception as e:
         db.session.rollback()
+        print(f"❌ Error al eliminar cliente {id}: {str(e)}")
         return jsonify({'error': f'Error al eliminar el cliente: {str(e)}'}), 500
 
 # ============================================================

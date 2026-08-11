@@ -121,8 +121,16 @@
             background: #4b5563;
         }
 
-        /* Estilos para impresión */
+        /* ============================================
+           ESTILOS PARA IMPRESIÓN (OPTIMIZADOS)
+           ============================================ */
         @media print {
+            /* 🔥 Configuración de página para papel térmico */
+            @page {
+                margin: 0;
+                size: 58mm auto;
+            }
+            
             body {
                 background: white;
                 padding: 0;
@@ -134,35 +142,46 @@
                 border: none;
                 border-radius: 0;
                 box-shadow: none;
-                padding: 6px 4px;
+                padding: 4px 2px;  /* 🔥 Padding reducido */
                 margin: 0;
             }
             .ticket {
-                font-size: 11px;
-                line-height: 1.3;
+                font-size: 9px;   /* 🔥 Fuente más pequeña para 58mm */
+                line-height: 1.2;
             }
             .no-imprimir {
                 display: none !important;
             }
-            /* Ajuste para papel de 58mm (ancho máximo) */
+            /* 🔥 Ajustes específicos para el contenido */
             .ticket .producto-linea {
-                font-size: 10px;
+                font-size: 8px;
             }
             .ticket .separator-doble {
                 border-top: 1.5px solid #000;
+                margin: 2px 0;
             }
             .ticket .separator-simple {
                 border-top: 0.5px solid #000;
+                margin: 2px 0;
             }
-            /* Ocultar elementos de navegación del navegador */
-            .no-print {
-                display: none !important;
+            .ticket .totales td {
+                padding: 1px 0;
             }
-            /* Forzar color de fondo blanco */
+            .ticket .footer-mensaje {
+                font-size: 9px;
+                margin-top: 4px;
+            }
+            .ticket .footer-url {
+                font-size: 8px;
+            }
+            /* Forzar colores en impresión */
             body, .ticket-container, .ticket {
                 background: white !important;
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
+            }
+            .no-print {
+                display: none !important;
             }
         }
     </style>
@@ -261,11 +280,11 @@
                 {% endif %}
                 <tr>
                     <td class="label">Método Cobro:</td>
-                    <td class="value">{{ venta.metodo_cobro }}</td>
+                    <td class="value">{{ metodo_mostrar }}</td>   <!-- 🔥 ENMASCARADO -->
                 </tr>
                 <tr>
                     <td class="label">Tasa aplicada:</td>
-                    <td class="value">{{ "%.2f"|format(venta.tasa_aplicada or 0) }}</td>
+                    <td class="value">{{ "%.2f"|format(tasa_mostrar or 0) }}</td>   <!-- 🔥 ENMASCARADO -->
                 </tr>
                 <tr>
                     <td class="label">Método Pago:</td>

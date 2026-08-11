@@ -123,7 +123,12 @@ document.addEventListener('DOMContentLoaded', function() {
             headers: { 'Content-Type': 'application/json' }
         })
         .then(r => {
-            if (!r.ok) throw new Error('Error al eliminar cliente');
+            if (!r.ok) {
+                // Intentar obtener el mensaje de error del servidor
+                return r.json().then(errData => {
+                    throw new Error(errData.error || 'Error al eliminar cliente');
+                });
+            }
             return r.json();
         })
         .then(res => {
@@ -132,8 +137,9 @@ document.addEventListener('DOMContentLoaded', function() {
             cargarClientes();
         })
         .catch(err => {
-            alert('Error: ' + err.message);
-            cerrarModalEliminar();
+            alert('❌ Error: ' + err.message);
+            // No cerramos el modal para que el usuario pueda ver el error y reintentar o cancelar
+            // Si el error es por apartados activos, el modal sigue abierto y el usuario puede decidir.
         });
     };
 
