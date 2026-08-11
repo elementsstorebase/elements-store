@@ -81,6 +81,7 @@ class Cliente(db.Model):
     limite_credito = db.Column(db.Float, default=0.0)
     saldo_deudor = db.Column(db.Float, default=0.0)
     es_fijo = db.Column(db.Boolean, default=False)
+    activo = db.Column(db.Boolean, default=True, nullable=False)  # ✅ NUEVO CAMPO PARA DESACTIVACIÓN LÓGICA
     ventas = db.relationship('Venta', backref='cliente', lazy=True)
     creditos = db.relationship('Credito', backref='cliente', lazy=True)
     apartados = db.relationship('Apartado', backref='cliente', lazy=True)

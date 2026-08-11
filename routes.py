@@ -1860,14 +1860,15 @@ def eliminar_producto(id):
     return jsonify({'mensaje': 'Producto eliminado'})
 
 # ============================================================
-# API: CLIENTES (PROTEGIDA) - MODIFICADO PARA FILTRAR FIJOS
+# API: CLIENTES (PROTEGIDA) - MODIFICADO PARA FILTRAR ACTIVOS Y FIJOS
 # ============================================================
 
 @api_bp.route('/clientes', methods=['GET'])
 @login_required
 def get_clientes():
     es_fijo = request.args.get('es_fijo')
-    query = Cliente.query
+    # 🔥 FILTRO: solo clientes activos
+    query = Cliente.query.filter_by(activo=True)
     if es_fijo is not None:
         query = query.filter_by(es_fijo=es_fijo.lower() == 'true')
     clientes = query.all()
@@ -1903,27 +1904,23 @@ def crear_cliente():
     if not nombre or not apellido or not cedula:
         return jsonify({'error': 'Nombre, apellido y cédula son obligatorios'}), 400
     
-    # Buscar si ya existe un cliente con esa cédula
+    # Buscar si ya existe un cliente con esa cédula (activo o no)
     cliente_existente = Cliente.query.filter_by(cedula=cedula).first()
     
     if cliente_existente:
-        # Si ya existe, actualizar a fijo (si no lo era)
+        # Si ya existe, actualizar a fijo (si no lo era) y reactivar si estaba desactivado
         if not cliente_existente.es_fijo:
             cliente_existente.es_fijo = True
-            db.session.commit()
-            return jsonify({
-                'mensaje': f'✅ El cliente {nombre} {apellido} ya existía y ahora es un cliente fijo.',
-                'id': cliente_existente.id,
-                'actualizado': True
-            }), 200
-        else:
-            return jsonify({
-                'mensaje': f'ℹ️ El cliente {nombre} {apellido} ya es un cliente fijo.',
-                'id': cliente_existente.id,
-                'actualizado': False
-            }), 200
+        if not cliente_existente.activo:
+            cliente_existente.activo = True
+        db.session.commit()
+        return jsonify({
+            'mensaje': f'✅ El cliente {nombre} {apellido} ya existía y ahora es un cliente fijo activo.',
+            'id': cliente_existente.id,
+            'actualizado': True
+        }), 200
     else:
-        # Crear nuevo cliente
+        # Crear nuevo cliente (activo por defecto)
         cliente = Cliente(
             nombre=nombre,
             apellido=apellido,
@@ -1932,7 +1929,8 @@ def crear_cliente():
             telefono=telefono,
             limite_credito=limite_credito,
             saldo_deudor=0.0,
-            es_fijo=es_fijo
+            es_fijo=es_fijo,
+            activo=True  # ✅ nuevo cliente activo
         )
         db.session.add(cliente)
         db.session.commit()
@@ -1968,7 +1966,7 @@ def actualizar_cliente(id):
     return jsonify({'mensaje': 'Cliente actualizado'})
 
 # ============================================================
-# 🔥 CORRECCIÓN: ELIMINAR CLIENTE (CON VALIDACIÓN COMPLETA Y REASIGNACIÓN A GENÉRICO)
+# 🔥 CORRECCIÓN: ELIMINAR CLIENTE (DESACTIVACIÓN LÓGICA)
 # ============================================================
 @api_bp.route('/clientes/<int:id>', methods=['DELETE'])
 @login_required
@@ -1986,44 +1984,29 @@ def eliminar_cliente(id):
         for a in apartados_con_saldo:
             detalles.append(f"#{a.id} (${a.saldo_restante:.2f} pendiente)")
         return jsonify({
-            'error': f'No se puede eliminar el cliente porque tiene apartados activos con saldo pendiente: {", ".join(detalles)}. '
+            'error': f'No se puede desactivar el cliente porque tiene apartados activos con saldo pendiente: {", ".join(detalles)}. '
                      'Primero debe finalizar o cancelar estos apartados.'
         }), 400
     
     # ============================================================
-    # 2. REASIGNAR TODOS LOS REGISTROS ASOCIADOS A UN CLIENTE GENÉRICO
-    # ============================================================
-    generic = _obtener_cliente_generico()
-    
-    # Reasignar apartados (todos, incluso reintegrados o pagados)
-    apartados = Apartado.query.filter_by(cliente_id=id).all()
-    for a in apartados:
-        a.cliente_id = generic.id
-    db.session.commit()
-    
-    # Reasignar ventas
-    ventas = Venta.query.filter_by(cliente_id=id).all()
-    for v in ventas:
-        v.cliente_id = generic.id
-    db.session.commit()
-    
-    # Reasignar créditos
-    creditos = Credito.query.filter_by(cliente_id=id).all()
-    for c in creditos:
-        c.cliente_id = generic.id
-    db.session.commit()
-    
-    # ============================================================
-    # 3. ELIMINAR CLIENTE
+    # 2. DESACTIVACIÓN LÓGICA (sin borrar datos ni reasignar)
     # ============================================================
     try:
-        db.session.delete(cliente)
+        cliente.activo = False
         db.session.commit()
-        return jsonify({'mensaje': 'Cliente eliminado correctamente'})
+        
+        # Registrar log
+        log = Log(accion='CLIENTE_DESACTIVADO', detalle=f'Cliente {cliente.nombre} {cliente.apellido} (ID {cliente.id}) desactivado.')
+        db.session.add(log)
+        db.session.commit()
+        
+        return jsonify({'mensaje': 'Cliente desactivado correctamente (no se borraron datos históricos).'})
     except Exception as e:
         db.session.rollback()
-        print(f"❌ Error al eliminar cliente {id}: {str(e)}")
-        return jsonify({'error': f'Error al eliminar el cliente: {str(e)}'}), 500
+        print(f"❌ Error al desactivar cliente {id}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Error al desactivar el cliente: {str(e)}'}), 500
 
 # ============================================================
 # API: VENTAS (PROTEGIDA) - CORREGIDO: TOTAL VES = SUBTOTAL + IVA
