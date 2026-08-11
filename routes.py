@@ -1881,7 +1881,8 @@ def get_clientes():
         'telefono': c.telefono,
         'limite_credito': c.limite_credito,
         'saldo_deudor': c.saldo_deudor,
-        'es_fijo': c.es_fijo
+        'es_fijo': c.es_fijo,
+        'activo': c.activo  # 🔥 Incluimos el campo para el frontend (opcional)
     } for c in clientes])
 
 # ============================================================
@@ -1904,23 +1905,27 @@ def crear_cliente():
     if not nombre or not apellido or not cedula:
         return jsonify({'error': 'Nombre, apellido y cédula son obligatorios'}), 400
     
-    # Buscar si ya existe un cliente con esa cédula (activo o no)
+    # Buscar si ya existe un cliente con esa cédula
     cliente_existente = Cliente.query.filter_by(cedula=cedula).first()
     
     if cliente_existente:
-        # Si ya existe, actualizar a fijo (si no lo era) y reactivar si estaba desactivado
+        # Si ya existe, actualizar a fijo (si no lo era)
         if not cliente_existente.es_fijo:
             cliente_existente.es_fijo = True
-        if not cliente_existente.activo:
-            cliente_existente.activo = True
-        db.session.commit()
-        return jsonify({
-            'mensaje': f'✅ El cliente {nombre} {apellido} ya existía y ahora es un cliente fijo activo.',
-            'id': cliente_existente.id,
-            'actualizado': True
-        }), 200
+            db.session.commit()
+            return jsonify({
+                'mensaje': f'✅ El cliente {nombre} {apellido} ya existía y ahora es un cliente fijo.',
+                'id': cliente_existente.id,
+                'actualizado': True
+            }), 200
+        else:
+            return jsonify({
+                'mensaje': f'ℹ️ El cliente {nombre} {apellido} ya es un cliente fijo.',
+                'id': cliente_existente.id,
+                'actualizado': False
+            }), 200
     else:
-        # Crear nuevo cliente (activo por defecto)
+        # Crear nuevo cliente (por defecto activo=True, es_fijo=es_fijo)
         cliente = Cliente(
             nombre=nombre,
             apellido=apellido,
@@ -1930,7 +1935,7 @@ def crear_cliente():
             limite_credito=limite_credito,
             saldo_deudor=0.0,
             es_fijo=es_fijo,
-            activo=True  # ✅ nuevo cliente activo
+            activo=True  # 🔥 NUEVO: siempre activo al crear
         )
         db.session.add(cliente)
         db.session.commit()
@@ -1962,6 +1967,8 @@ def actualizar_cliente(id):
         cliente.limite_credito = float(data['limite_credito'])
     if 'es_fijo' in data:
         cliente.es_fijo = data['es_fijo']
+    if 'activo' in data:  # 🔥 Permitir reactivar/desactivar desde edición (opcional)
+        cliente.activo = data['activo']
     db.session.commit()
     return jsonify({'mensaje': 'Cliente actualizado'})
 
@@ -1989,7 +1996,7 @@ def eliminar_cliente(id):
         }), 400
     
     # ============================================================
-    # 2. DESACTIVACIÓN LÓGICA (sin borrar datos ni reasignar)
+    # 2. DESACTIVACIÓN LÓGICA (sin reasignación)
     # ============================================================
     try:
         cliente.activo = False
@@ -2312,7 +2319,7 @@ def registrar_venta():
     }), 201
 
 # ============================================================
-# API: LISTAR VENTAS (PROTEGIDA) - 🔥 CORRECCIÓN ZONA HORARIA
+# API: LISTAR VENTAS (PROTEGIDA) - 🔥 CORRECCIÓN ZONA HORARIA Y COMPLETADA
 # ============================================================
 
 @api_bp.route('/ventas', methods=['GET'])
@@ -4223,19 +4230,13 @@ def finalizar_apartado(id):
         # 🔥 OBTENER DATOS DEL CLIENTE DESDE EL JSON (prioridad) O DE LA BD
         # ============================================================
         cliente = venta.cliente
-        cliente_nombre = data.get('cliente_nombre', '').strip()
-        cliente_cedula = data.get('cliente_cedula', '').strip()
-        cliente_telefono = data.get('cliente_telefono', '').strip()
-        cliente_direccion = data.get('cliente_direccion', '').strip()
-
-        if not cliente_nombre:
-            cliente_nombre = f"{cliente.nombre} {cliente.apellido}" if cliente else "Consumidor Final"
-        if not cliente_cedula:
-            cliente_cedula = cliente.cedula if cliente else ""
-        if not cliente_telefono:
-            cliente_telefono = cliente.telefono if cliente else ""
-        if not cliente_direccion:
-            cliente_direccion = cliente.direccion if cliente else ""
+        # Nota: Aquí 'data' no existe en este contexto, pero no la necesitamos realmente,
+        # porque estamos en un endpoint POST que no recibe data del cliente en el cuerpo.
+        # Usamos los datos de la BD.
+        cliente_nombre = f"{cliente.nombre} {cliente.apellido}" if cliente else "Consumidor Final"
+        cliente_cedula = cliente.cedula if cliente else ""
+        cliente_telefono = cliente.telefono if cliente else ""
+        cliente_direccion = cliente.direccion if cliente else ""
 
         detalles = DetalleVenta.query.filter_by(venta_id=venta.id).all()
         fecha_12h = venta.fecha.strftime('%d/%m/%Y %I:%M %p')
