@@ -56,11 +56,13 @@ def agregar_columnas_venta_si_no_existen():
     except Exception as e:
         print(f"⚠️ Error al agregar columnas a 'ventas': {e}")
 
-# Ejecutar la migración al importar el módulo
-try:
-    agregar_columnas_venta_si_no_existen()
-except:
-    pass
+# ============================================================
+# 🔥 MIGRACIÓN DESACTIVADA: Ahora se ejecuta desde app.py con contexto de aplicación.
+# ============================================================
+# try:
+#     agregar_columnas_venta_si_no_existen()
+# except:
+#     pass
 
 # ============================================================
 # 🔥 MODIFICADO: FUNCIÓN PARA OBTENER EL PRÓXIMO NÚMERO DE TICKET (SECUENCIA ESTRICTA)
