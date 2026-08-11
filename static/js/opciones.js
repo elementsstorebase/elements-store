@@ -1,5 +1,13 @@
 // opciones.js - Gestión de catálogo (Categorías, Subcategorías, Marcas, Tallas, Configuración Ticket)
 
+// ---------- ESTADO DE PAGINACIÓN Y BÚSQUEDA ----------
+const estado = {
+    categorias: { page: 1, per_page: 25, search: '' },
+    subcategorias: { page: 1, per_page: 25, search: '' },
+    marcas: { page: 1, per_page: 25, search: '' },
+    tallas: { page: 1, per_page: 25, search: '' }
+};
+
 document.addEventListener('DOMContentLoaded', function() {
     const tabs = document.querySelectorAll('.tab-btn');
     const panes = {
@@ -44,6 +52,60 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Cargar configuración del ticket al inicio
     cargarConfigTicket();
+
+    // ---------- EVENTOS DE BÚSQUEDA Y PAGINACIÓN ----------
+    const entidades = ['categorias', 'subcategorias', 'marcas', 'tallas'];
+    entidades.forEach(ent => {
+        // Botón de búsqueda
+        const btnBuscar = document.getElementById(`btn-buscar-${ent}`);
+        if (btnBuscar) {
+            btnBuscar.addEventListener('click', function() {
+                const input = document.getElementById(`buscar-${ent}`);
+                if (input) {
+                    estado[ent].search = input.value.trim();
+                    estado[ent].page = 1; // Reiniciar a primera página al buscar
+                    cargarDatos(ent);
+                }
+            });
+        }
+        // Input de búsqueda: buscar al presionar Enter
+        const inputBuscar = document.getElementById(`buscar-${ent}`);
+        if (inputBuscar) {
+            inputBuscar.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    const btn = document.getElementById(`btn-buscar-${ent}`);
+                    if (btn) btn.click();
+                }
+            });
+        }
+        // Select de elementos por página
+        const perPageSelect = document.getElementById(`per-page-${ent}`);
+        if (perPageSelect) {
+            perPageSelect.addEventListener('change', function() {
+                estado[ent].per_page = parseInt(this.value);
+                estado[ent].page = 1; // Reiniciar a primera página al cambiar per_page
+                cargarDatos(ent);
+            });
+        }
+        // Botón Anterior
+        const prevBtn = document.getElementById(`prev-${ent}`);
+        if (prevBtn) {
+            prevBtn.addEventListener('click', function() {
+                if (estado[ent].page > 1) {
+                    estado[ent].page--;
+                    cargarDatos(ent);
+                }
+            });
+        }
+        // Botón Siguiente
+        const nextBtn = document.getElementById(`next-${ent}`);
+        if (nextBtn) {
+            nextBtn.addEventListener('click', function() {
+                estado[ent].page++;
+                cargarDatos(ent);
+            });
+        }
+    });
 });
 
 // ---------- UTILIDADES ----------
@@ -90,36 +152,75 @@ function abrirModal(modalId, titleId, title, formId, data = null) {
 
 // ---------- CRUD CATEGORÍAS ----------
 function cargarCategorias() {
-    fetch('/api/categorias')
+    const params = new URLSearchParams();
+    params.append('page', estado.categorias.page);
+    params.append('per_page', estado.categorias.per_page);
+    if (estado.categorias.search) params.append('search', estado.categorias.search);
+
+    fetch('/api/categorias?' + params.toString())
         .then(res => res.json())
         .then(data => {
             const tbody = document.getElementById('tabla-categorias');
             tbody.innerHTML = '';
-            if (data.length === 0) {
+            if (data.items && data.items.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-gray-400">No hay categorías</td></tr>';
+            } else if (data.items) {
+                data.items.forEach(c => {
+                    const tr = document.createElement('tr');
+                    tr.className = 'border-b border-gray-100';
+                    tr.innerHTML = `
+                        <td class="py-2">${c.id}</td>
+                        <td>${c.nombre}</td>
+                        <td>${c.subcategorias_count || 0}</td>
+                        <td>${c.marcas_count || 0}</td>
+                        <td class="text-right">
+                            <button onclick="editarCategoria(${c.id})" class="text-indigo-600 hover:text-indigo-800 mr-2">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button onclick="eliminarCategoria(${c.id})" class="text-red-500 hover:text-red-700">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } else {
+                // Fallback si la respuesta no tiene paginación (ej. lista plana)
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-gray-400">No hay categorías</td></tr>';
+                } else {
+                    data.forEach(c => {
+                        const tr = document.createElement('tr');
+                        tr.className = 'border-b border-gray-100';
+                        tr.innerHTML = `
+                            <td class="py-2">${c.id}</td>
+                            <td>${c.nombre}</td>
+                            <td>${c.subcategorias_count || 0}</td>
+                            <td>${c.marcas_count || 0}</td>
+                            <td class="text-right">
+                                <button onclick="editarCategoria(${c.id})" class="text-indigo-600 hover:text-indigo-800 mr-2">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button onclick="eliminarCategoria(${c.id})" class="text-red-500 hover:text-red-700">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                }
+                // Actualizar info de paginación si no hay metadatos
+                actualizarInfoPaginacion('categorias', data.length, 1, 1, data.length);
                 return;
             }
-            data.forEach(c => {
-                const tr = document.createElement('tr');
-                tr.className = 'border-b border-gray-100';
-                tr.innerHTML = `
-                    <td class="py-2">${c.id}</td>
-                    <td>${c.nombre}</td>
-                    <td>${c.subcategorias_count || 0}</td>
-                    <td>${c.marcas_count || 0}</td>
-                    <td class="text-right">
-                        <button onclick="editarCategoria(${c.id})" class="text-indigo-600 hover:text-indigo-800 mr-2">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <button onclick="eliminarCategoria(${c.id})" class="text-red-500 hover:text-red-700">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </td>
-                `;
-                tbody.appendChild(tr);
-            });
+
+            // Actualizar controles de paginación
+            actualizarInfoPaginacion('categorias', data.total, data.page, data.pages, data.per_page);
         })
-        .catch(err => console.error('Error cargando categorías:', err));
+        .catch(err => {
+            console.error('Error cargando categorías:', err);
+            document.getElementById('tabla-categorias').innerHTML = '<tr><td colspan="5" class="text-center py-4 text-red-500">Error al cargar datos</td></tr>';
+        });
 }
 
 function abrirModalCategoria(data = null) {
@@ -176,35 +277,69 @@ function guardarCategoria(e) {
 
 // ---------- CRUD SUBCATEGORÍAS ----------
 function cargarSubcategorias() {
-    fetch('/api/subcategorias')
+    const params = new URLSearchParams();
+    params.append('page', estado.subcategorias.page);
+    params.append('per_page', estado.subcategorias.per_page);
+    if (estado.subcategorias.search) params.append('search', estado.subcategorias.search);
+
+    fetch('/api/subcategorias?' + params.toString())
         .then(res => res.json())
         .then(data => {
             const tbody = document.getElementById('tabla-subcategorias');
             tbody.innerHTML = '';
-            if (data.length === 0) {
+            if (data.items && data.items.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-gray-400">No hay subcategorías</td></tr>';
+            } else if (data.items) {
+                data.items.forEach(s => {
+                    const tr = document.createElement('tr');
+                    tr.className = 'border-b border-gray-100';
+                    tr.innerHTML = `
+                        <td class="py-2">${s.id}</td>
+                        <td>${s.nombre}</td>
+                        <td>${s.categoria_nombre || 'Sin categoría'}</td>
+                        <td class="text-right">
+                            <button onclick="editarSubcategoria(${s.id})" class="text-indigo-600 hover:text-indigo-800 mr-2">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button onclick="eliminarSubcategoria(${s.id})" class="text-red-500 hover:text-red-700">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } else {
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-gray-400">No hay subcategorías</td></tr>';
+                } else {
+                    data.forEach(s => {
+                        const tr = document.createElement('tr');
+                        tr.className = 'border-b border-gray-100';
+                        tr.innerHTML = `
+                            <td class="py-2">${s.id}</td>
+                            <td>${s.nombre}</td>
+                            <td>${s.categoria_nombre || 'Sin categoría'}</td>
+                            <td class="text-right">
+                                <button onclick="editarSubcategoria(${s.id})" class="text-indigo-600 hover:text-indigo-800 mr-2">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button onclick="eliminarSubcategoria(${s.id})" class="text-red-500 hover:text-red-700">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                }
+                actualizarInfoPaginacion('subcategorias', data.length, 1, 1, data.length);
                 return;
             }
-            data.forEach(s => {
-                const tr = document.createElement('tr');
-                tr.className = 'border-b border-gray-100';
-                tr.innerHTML = `
-                    <td class="py-2">${s.id}</td>
-                    <td>${s.nombre}</td>
-                    <td>${s.categoria_nombre || 'Sin categoría'}</td>
-                    <td class="text-right">
-                        <button onclick="editarSubcategoria(${s.id})" class="text-indigo-600 hover:text-indigo-800 mr-2">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <button onclick="eliminarSubcategoria(${s.id})" class="text-red-500 hover:text-red-700">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </td>
-                `;
-                tbody.appendChild(tr);
-            });
+            actualizarInfoPaginacion('subcategorias', data.total, data.page, data.pages, data.per_page);
         })
-        .catch(err => console.error('Error cargando subcategorías:', err));
+        .catch(err => {
+            console.error('Error cargando subcategorías:', err);
+            document.getElementById('tabla-subcategorias').innerHTML = '<tr><td colspan="4" class="text-center py-4 text-red-500">Error al cargar datos</td></tr>';
+        });
 }
 
 function abrirModalSubcategoria(data = null) {
@@ -265,35 +400,69 @@ function guardarSubcategoria(e) {
 
 // ---------- CRUD MARCAS ----------
 function cargarMarcas() {
-    fetch('/api/marcas')
+    const params = new URLSearchParams();
+    params.append('page', estado.marcas.page);
+    params.append('per_page', estado.marcas.per_page);
+    if (estado.marcas.search) params.append('search', estado.marcas.search);
+
+    fetch('/api/marcas?' + params.toString())
         .then(res => res.json())
         .then(data => {
             const tbody = document.getElementById('tabla-marcas');
             tbody.innerHTML = '';
-            if (data.length === 0) {
+            if (data.items && data.items.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-gray-400">No hay marcas</td></tr>';
+            } else if (data.items) {
+                data.items.forEach(m => {
+                    const tr = document.createElement('tr');
+                    tr.className = 'border-b border-gray-100';
+                    tr.innerHTML = `
+                        <td class="py-2">${m.id}</td>
+                        <td>${m.nombre}</td>
+                        <td>${m.categoria_nombre || 'Sin categoría'}</td>
+                        <td class="text-right">
+                            <button onclick="editarMarca(${m.id})" class="text-indigo-600 hover:text-indigo-800 mr-2">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button onclick="eliminarMarca(${m.id})" class="text-red-500 hover:text-red-700">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } else {
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-gray-400">No hay marcas</td></tr>';
+                } else {
+                    data.forEach(m => {
+                        const tr = document.createElement('tr');
+                        tr.className = 'border-b border-gray-100';
+                        tr.innerHTML = `
+                            <td class="py-2">${m.id}</td>
+                            <td>${m.nombre}</td>
+                            <td>${m.categoria_nombre || 'Sin categoría'}</td>
+                            <td class="text-right">
+                                <button onclick="editarMarca(${m.id})" class="text-indigo-600 hover:text-indigo-800 mr-2">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button onclick="eliminarMarca(${m.id})" class="text-red-500 hover:text-red-700">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                }
+                actualizarInfoPaginacion('marcas', data.length, 1, 1, data.length);
                 return;
             }
-            data.forEach(m => {
-                const tr = document.createElement('tr');
-                tr.className = 'border-b border-gray-100';
-                tr.innerHTML = `
-                    <td class="py-2">${m.id}</td>
-                    <td>${m.nombre}</td>
-                    <td>${m.categoria_nombre || 'Sin categoría'}</td>
-                    <td class="text-right">
-                        <button onclick="editarMarca(${m.id})" class="text-indigo-600 hover:text-indigo-800 mr-2">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <button onclick="eliminarMarca(${m.id})" class="text-red-500 hover:text-red-700">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </td>
-                `;
-                tbody.appendChild(tr);
-            });
+            actualizarInfoPaginacion('marcas', data.total, data.page, data.pages, data.per_page);
         })
-        .catch(err => console.error('Error cargando marcas:', err));
+        .catch(err => {
+            console.error('Error cargando marcas:', err);
+            document.getElementById('tabla-marcas').innerHTML = '<tr><td colspan="4" class="text-center py-4 text-red-500">Error al cargar datos</td></tr>';
+        });
 }
 
 function abrirModalMarca(data = null) {
@@ -352,35 +521,69 @@ function guardarMarca(e) {
 
 // ---------- CRUD TALLAS ----------
 function cargarTallas() {
-    fetch('/api/tallas')
+    const params = new URLSearchParams();
+    params.append('page', estado.tallas.page);
+    params.append('per_page', estado.tallas.per_page);
+    if (estado.tallas.search) params.append('search', estado.tallas.search);
+
+    fetch('/api/tallas?' + params.toString())
         .then(res => res.json())
         .then(data => {
             const tbody = document.getElementById('tabla-tallas');
             tbody.innerHTML = '';
-            if (data.length === 0) {
+            if (data.items && data.items.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-gray-400">No hay tallas</td></tr>';
+            } else if (data.items) {
+                data.items.forEach(t => {
+                    const tr = document.createElement('tr');
+                    tr.className = 'border-b border-gray-100';
+                    tr.innerHTML = `
+                        <td class="py-2">${t.id}</td>
+                        <td>${t.nombre}</td>
+                        <td>${t.subcategoria_nombre || 'Sin subcategoría'}</td>
+                        <td class="text-right">
+                            <button onclick="editarTalla(${t.id})" class="text-indigo-600 hover:text-indigo-800 mr-2">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button onclick="eliminarTalla(${t.id})" class="text-red-500 hover:text-red-700">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } else {
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-gray-400">No hay tallas</td></tr>';
+                } else {
+                    data.forEach(t => {
+                        const tr = document.createElement('tr');
+                        tr.className = 'border-b border-gray-100';
+                        tr.innerHTML = `
+                            <td class="py-2">${t.id}</td>
+                            <td>${t.nombre}</td>
+                            <td>${t.subcategoria_nombre || 'Sin subcategoría'}</td>
+                            <td class="text-right">
+                                <button onclick="editarTalla(${t.id})" class="text-indigo-600 hover:text-indigo-800 mr-2">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button onclick="eliminarTalla(${t.id})" class="text-red-500 hover:text-red-700">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                }
+                actualizarInfoPaginacion('tallas', data.length, 1, 1, data.length);
                 return;
             }
-            data.forEach(t => {
-                const tr = document.createElement('tr');
-                tr.className = 'border-b border-gray-100';
-                tr.innerHTML = `
-                    <td class="py-2">${t.id}</td>
-                    <td>${t.nombre}</td>
-                    <td>${t.subcategoria_nombre || 'Sin subcategoría'}</td>
-                    <td class="text-right">
-                        <button onclick="editarTalla(${t.id})" class="text-indigo-600 hover:text-indigo-800 mr-2">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <button onclick="eliminarTalla(${t.id})" class="text-red-500 hover:text-red-700">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </td>
-                `;
-                tbody.appendChild(tr);
-            });
+            actualizarInfoPaginacion('tallas', data.total, data.page, data.pages, data.per_page);
         })
-        .catch(err => console.error('Error cargando tallas:', err));
+        .catch(err => {
+            console.error('Error cargando tallas:', err);
+            document.getElementById('tabla-tallas').innerHTML = '<tr><td colspan="4" class="text-center py-4 text-red-500">Error al cargar datos</td></tr>';
+        });
 }
 
 function abrirModalTalla(data = null) {
@@ -556,5 +759,30 @@ function cargarDatos(tabName) {
         case 'ticket':
             cargarConfigTicket();
             break;
+    }
+}
+
+// ---------- ACTUALIZACIÓN DE CONTROLES DE PAGINACIÓN ----------
+function actualizarInfoPaginacion(entidad, total, page, pages, per_page) {
+    const infoSpan = document.getElementById(`info-${entidad}`);
+    const pageInfoSpan = document.getElementById(`page-info-${entidad}`);
+    const prevBtn = document.getElementById(`prev-${entidad}`);
+    const nextBtn = document.getElementById(`next-${entidad}`);
+
+    if (infoSpan) {
+        const start = total === 0 ? 0 : (page - 1) * per_page + 1;
+        const end = Math.min(page * per_page, total);
+        infoSpan.textContent = `Mostrando ${start} - ${end} de ${total}`;
+    }
+
+    if (pageInfoSpan) {
+        pageInfoSpan.textContent = `Página ${page} de ${pages || 1}`;
+    }
+
+    if (prevBtn) {
+        prevBtn.disabled = page <= 1;
+    }
+    if (nextBtn) {
+        nextBtn.disabled = page >= pages;
     }
 }

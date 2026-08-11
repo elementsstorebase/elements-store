@@ -19,6 +19,25 @@ main_bp = Blueprint('main', __name__)
 api_bp = Blueprint('api', __name__)
 
 # ============================================================
+# 🔥 NUEVO: FUNCIÓN PARA OBTENER EL PRÓXIMO NÚMERO DE TICKET DISPONIBLE
+# ============================================================
+def obtener_proximo_numero_ticket():
+    """
+    Retorna el número de ticket más bajo disponible (el primer hueco en la secuencia).
+    Si no hay tickets, retorna 1.
+    """
+    # Obtener todos los números de ticket existentes (ordenados)
+    tickets_existentes = db.session.query(Venta.numero_ticket).order_by(Venta.numero_ticket).all()
+    usados = {t[0] for t in tickets_existentes}
+    
+    # Buscar el primer número faltante desde 1 en adelante
+    n = 1
+    while n in usados:
+        n += 1
+    return n
+# ============================================================
+
+# ============================================================
 # FUNCIONES DE IMPRESIÓN (definidas al inicio para que estén disponibles)
 # ============================================================
 
@@ -406,13 +425,20 @@ def generar_ticket_pos58(datos_venta, config_ticket, max_chars=32):
 
 
 # ============================================================
-# FUNCIÓN PARA RUTA PORTABLE DE FUENTES
+# FUNCIÓN PARA RUTA PORTABLE DE FUENTES (MODIFICADA PARA EJECUTABLE)
 # ============================================================
 
 def get_font_path(font_name):
+    """
+    Retorna la ruta completa a un archivo de fuente.
+    - Si está compilado como .exe, busca en sys._MEIPASS/fonts/
+    - Si está en desarrollo, busca en la carpeta fonts/ del proyecto
+    """
     if getattr(sys, 'frozen', False):
-        base_dir = os.path.dirname(sys.executable)
+        # Cuando está compilado como .exe, PyInstaller usa sys._MEIPASS
+        base_dir = sys._MEIPASS
     else:
+        # En entorno de desarrollo
         base_dir = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base_dir, 'fonts', font_name)
 
@@ -1035,22 +1061,48 @@ def buscar_productos():
     return jsonify(result)
 
 # ============================================================
-# API: CATEGORÍAS (PROTEGIDA)
+# API: CATEGORÍAS (PROTEGIDA) - 🔥 MODIFICADO PARA PAGINACIÓN Y BÚSQUEDA
 # ============================================================
 
 @api_bp.route('/categorias', methods=['GET'])
 @login_required
 def get_categorias():
-    cats = Categoria.query.all()
-    result = []
-    for c in cats:
-        result.append({
+    # Parámetros de paginación y búsqueda (opcionales)
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    search = request.args.get('search', '').strip()
+    
+    query = Categoria.query
+    if search:
+        query = query.filter(Categoria.nombre.ilike(f'%{search}%'))
+    
+    # Si no se solicita paginación explícita (sin parámetros page/per_page), devolver todo (compatibilidad)
+    if 'page' in request.args or 'per_page' in request.args:
+        paginado = query.paginate(page=page, per_page=per_page, error_out=False)
+        items = [{
             'id': c.id,
             'nombre': c.nombre,
             'subcategorias_count': len(c.subcategorias),
             'marcas_count': len(c.marcas)
+        } for c in paginado.items]
+        return jsonify({
+            'items': items,
+            'total': paginado.total,
+            'page': paginado.page,
+            'per_page': paginado.per_page,
+            'pages': paginado.pages
         })
-    return jsonify(result)
+    else:
+        cats = query.all()
+        result = []
+        for c in cats:
+            result.append({
+                'id': c.id,
+                'nombre': c.nombre,
+                'subcategorias_count': len(c.subcategorias),
+                'marcas_count': len(c.marcas)
+            })
+        return jsonify(result)
 
 @api_bp.route('/categorias/<int:id>', methods=['GET'])
 @login_required
@@ -1110,26 +1162,55 @@ def eliminar_categoria(id):
     return jsonify({'mensaje': 'Categoría eliminada'})
 
 # ============================================================
-# API: SUBCATEGORÍAS (PROTEGIDA)
+# API: SUBCATEGORÍAS (PROTEGIDA) - 🔥 MODIFICADO PARA PAGINACIÓN Y BÚSQUEDA
 # ============================================================
 
 @api_bp.route('/subcategorias', methods=['GET'])
 @login_required
 def get_subcategorias():
     cat_id = request.args.get('categoria_id')
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    search = request.args.get('search', '').strip()
+    
+    query = Subcategoria.query
     if cat_id:
-        subs = Subcategoria.query.filter_by(categoria_id=cat_id).all()
-    else:
-        subs = Subcategoria.query.all()
-    result = []
-    for s in subs:
-        result.append({
-            'id': s.id,
-            'nombre': s.nombre,
-            'categoria_id': s.categoria_id,
-            'categoria_nombre': s.categoria.nombre if s.categoria else None
+        query = query.filter_by(categoria_id=cat_id)
+    if search:
+        query = query.filter(Subcategoria.nombre.ilike(f'%{search}%'))
+    
+    # Si no se solicita paginación explícita, devolver todo (compatibilidad)
+    if 'page' in request.args or 'per_page' in request.args:
+        paginado = query.paginate(page=page, per_page=per_page, error_out=False)
+        items = []
+        for s in paginado.items:
+            items.append({
+                'id': s.id,
+                'nombre': s.nombre,
+                'categoria_id': s.categoria_id,
+                'categoria_nombre': s.categoria.nombre if s.categoria else None
+            })
+        return jsonify({
+            'items': items,
+            'total': paginado.total,
+            'page': paginado.page,
+            'per_page': paginado.per_page,
+            'pages': paginado.pages
         })
-    return jsonify(result)
+    else:
+        if cat_id:
+            subs = query.all()
+        else:
+            subs = query.all()
+        result = []
+        for s in subs:
+            result.append({
+                'id': s.id,
+                'nombre': s.nombre,
+                'categoria_id': s.categoria_id,
+                'categoria_nombre': s.categoria.nombre if s.categoria else None
+            })
+        return jsonify(result)
 
 @api_bp.route('/subcategorias/<int:id>', methods=['GET'])
 @login_required
@@ -1205,26 +1286,54 @@ def eliminar_subcategoria(id):
     return jsonify({'mensaje': 'Subcategoría eliminada'})
 
 # ============================================================
-# API: MARCAS (PROTEGIDA)
+# API: MARCAS (PROTEGIDA) - 🔥 MODIFICADO PARA PAGINACIÓN Y BÚSQUEDA
 # ============================================================
 
 @api_bp.route('/marcas', methods=['GET'])
 @login_required
 def get_marcas():
     cat_id = request.args.get('categoria_id')
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    search = request.args.get('search', '').strip()
+    
+    query = Marca.query
     if cat_id:
-        marcas = Marca.query.filter_by(categoria_id=cat_id).all()
-    else:
-        marcas = Marca.query.all()
-    result = []
-    for m in marcas:
-        result.append({
-            'id': m.id,
-            'nombre': m.nombre,
-            'categoria_id': m.categoria_id,
-            'categoria_nombre': m.categoria.nombre if m.categoria else None
+        query = query.filter_by(categoria_id=cat_id)
+    if search:
+        query = query.filter(Marca.nombre.ilike(f'%{search}%'))
+    
+    if 'page' in request.args or 'per_page' in request.args:
+        paginado = query.paginate(page=page, per_page=per_page, error_out=False)
+        items = []
+        for m in paginado.items:
+            items.append({
+                'id': m.id,
+                'nombre': m.nombre,
+                'categoria_id': m.categoria_id,
+                'categoria_nombre': m.categoria.nombre if m.categoria else None
+            })
+        return jsonify({
+            'items': items,
+            'total': paginado.total,
+            'page': paginado.page,
+            'per_page': paginado.per_page,
+            'pages': paginado.pages
         })
-    return jsonify(result)
+    else:
+        if cat_id:
+            marcas = query.all()
+        else:
+            marcas = query.all()
+        result = []
+        for m in marcas:
+            result.append({
+                'id': m.id,
+                'nombre': m.nombre,
+                'categoria_id': m.categoria_id,
+                'categoria_nombre': m.categoria.nombre if m.categoria else None
+            })
+        return jsonify(result)
 
 @api_bp.route('/marcas/<int:id>', methods=['GET'])
 @login_required
@@ -1300,26 +1409,54 @@ def eliminar_marca(id):
     return jsonify({'mensaje': 'Marca eliminada'})
 
 # ============================================================
-# API: TALLAS (PROTEGIDA)
+# API: TALLAS (PROTEGIDA) - 🔥 MODIFICADO PARA PAGINACIÓN Y BÚSQUEDA
 # ============================================================
 
 @api_bp.route('/tallas', methods=['GET'])
 @login_required
 def get_tallas():
     subcat_id = request.args.get('subcategoria_id')
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    search = request.args.get('search', '').strip()
+    
+    query = Talla.query
     if subcat_id:
-        tallas = Talla.query.filter_by(subcategoria_id=subcat_id).all()
-    else:
-        tallas = Talla.query.all()
-    result = []
-    for t in tallas:
-        result.append({
-            'id': t.id,
-            'nombre': t.nombre,
-            'subcategoria_id': t.subcategoria_id,
-            'subcategoria_nombre': t.subcategoria.nombre if t.subcategoria else None
+        query = query.filter_by(subcategoria_id=subcat_id)
+    if search:
+        query = query.filter(Talla.nombre.ilike(f'%{search}%'))
+    
+    if 'page' in request.args or 'per_page' in request.args:
+        paginado = query.paginate(page=page, per_page=per_page, error_out=False)
+        items = []
+        for t in paginado.items:
+            items.append({
+                'id': t.id,
+                'nombre': t.nombre,
+                'subcategoria_id': t.subcategoria_id,
+                'subcategoria_nombre': t.subcategoria.nombre if t.subcategoria else None
+            })
+        return jsonify({
+            'items': items,
+            'total': paginado.total,
+            'page': paginado.page,
+            'per_page': paginado.per_page,
+            'pages': paginado.pages
         })
-    return jsonify(result)
+    else:
+        if subcat_id:
+            tallas = query.all()
+        else:
+            tallas = query.all()
+        result = []
+        for t in tallas:
+            result.append({
+                'id': t.id,
+                'nombre': t.nombre,
+                'subcategoria_id': t.subcategoria_id,
+                'subcategoria_nombre': t.subcategoria.nombre if t.subcategoria else None
+            })
+        return jsonify(result)
 
 @api_bp.route('/tallas/<int:id>', methods=['GET'])
 @login_required
@@ -1736,19 +1873,45 @@ def actualizar_cliente(id):
     db.session.commit()
     return jsonify({'mensaje': 'Cliente actualizado'})
 
+# ============================================================
+# 🔥 CORRECCIÓN: ELIMINAR CLIENTE (CON VALIDACIÓN COMPLETA Y MANEJO DE ERRORES)
+# ============================================================
 @api_bp.route('/clientes/<int:id>', methods=['DELETE'])
 @login_required
 def eliminar_cliente(id):
     cliente = Cliente.query.get_or_404(id)
-    # Verificar si tiene deudas activas
+    
+    # Verificar dependencias
+    dependencias = []
+    
+    # Apartados activos
     if Apartado.query.filter_by(cliente_id=id, estado='activo').first():
-        return jsonify({'error': 'No se puede eliminar: el cliente tiene deudas activas'}), 400
-    db.session.delete(cliente)
-    db.session.commit()
-    return jsonify({'mensaje': 'Cliente eliminado'})
+        dependencias.append('tiene apartados activos')
+    
+    # Ventas
+    if Venta.query.filter_by(cliente_id=id).first():
+        dependencias.append('tiene ventas asociadas')
+    
+    # Créditos
+    if Credito.query.filter_by(cliente_id=id).first():
+        dependencias.append('tiene créditos asociados')
+    
+    if dependencias:
+        return jsonify({
+            'error': f'No se puede eliminar el cliente porque {", ".join(dependencias)}.'
+        }), 400
+    
+    try:
+        db.session.delete(cliente)
+        db.session.commit()
+        return jsonify({'mensaje': 'Cliente eliminado correctamente'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Error al eliminar el cliente: {str(e)}'}), 500
 
 # ============================================================
 # API: VENTAS (PROTEGIDA) - CORREGIDO: TOTAL VES = SUBTOTAL + IVA
+# 🔥 MODIFICADO: uso de obtener_proximo_numero_ticket()
 # ============================================================
 
 @api_bp.route('/ventas', methods=['POST'])
@@ -1765,14 +1928,15 @@ def registrar_venta():
     if not items:
         return jsonify({'error': 'El carrito está vacío'}), 400
 
+    # 🔥 NUEVO: Obtener el próximo número de ticket disponible
+    nuevo_ticket = obtener_proximo_numero_ticket()
+    
+    # Opcional: actualizar Configuracion para compatibilidad
     config = Configuracion.query.filter_by(clave='ultimo_ticket').first()
     if config:
-        ultimo_ticket = int(config.valor)
-        nuevo_ticket = ultimo_ticket + 1
         config.valor = str(nuevo_ticket)
     else:
-        nuevo_ticket = 1
-        config = Configuracion(clave='ultimo_ticket', valor='1')
+        config = Configuracion(clave='ultimo_ticket', valor=str(nuevo_ticket))
         db.session.add(config)
     db.session.commit()
 
@@ -2049,7 +2213,7 @@ def registrar_venta():
     }), 201
 
 # ============================================================
-# API: LISTAR VENTAS (PROTEGIDA)
+# API: LISTAR VENTAS (PROTEGIDA) - 🔥 CORRECCIÓN ZONA HORARIA
 # ============================================================
 
 @api_bp.route('/ventas', methods=['GET'])
@@ -2087,10 +2251,15 @@ def listar_ventas():
     result = []
     for v in ventas:
         cliente = v.cliente
+        # 🔥 CORRECCIÓN: Convertir fecha a hora local de Venezuela
+        if v.fecha.tzinfo:
+            fecha_local = v.fecha.astimezone(pytz.timezone('America/Caracas'))
+        else:
+            fecha_local = pytz.timezone('America/Caracas').localize(v.fecha)
         result.append({
             'id': v.id,
             'numero_ticket': v.numero_ticket,
-            'fecha': v.fecha.strftime('%Y-%m-%d %H:%M:%S'),
+            'fecha': fecha_local.strftime('%Y-%m-%d %H:%M:%S'),
             'cliente': f"{cliente.nombre} {cliente.apellido}" if cliente else "Consumidor Final",
             'cedula': cliente.cedula if cliente else "",
             'total_usd': v.total_usd,
@@ -2103,6 +2272,10 @@ def listar_ventas():
             'es_apartado': v.es_apartado
         })
     return jsonify(result)
+
+# ============================================================
+# API: DETALLE VENTA (PROTEGIDA) - 🔥 CORRECCIÓN ZONA HORARIA
+# ============================================================
 
 @api_bp.route('/ventas/<int:venta_id>', methods=['GET'])
 @login_required
@@ -2125,10 +2298,16 @@ def detalle_venta(venta_id):
             'subtotal_ves': detalle.precio_unitario_ves * detalle.cantidad
         })
 
+    # 🔥 CORRECCIÓN: Convertir fecha a hora local de Venezuela
+    if venta.fecha.tzinfo:
+        fecha_local = venta.fecha.astimezone(pytz.timezone('America/Caracas'))
+    else:
+        fecha_local = pytz.timezone('America/Caracas').localize(venta.fecha)
+
     return jsonify({
         'id': venta.id,
         'numero_ticket': venta.numero_ticket,
-        'fecha': venta.fecha.strftime('%Y-%m-%d %H:%M:%S'),
+        'fecha': fecha_local.strftime('%Y-%m-%d %H:%M:%S'),
         'cliente': f"{cliente.nombre} {cliente.apellido}" if cliente else "Consumidor Final",
         'cedula': cliente.cedula if cliente else "",
         'telefono': cliente.telefono if cliente else "",
@@ -2289,7 +2468,7 @@ def set_config_ticket():
     return jsonify({'mensaje': 'Configuración guardada correctamente'})
 
 # ============================================================
-# API: GENERAR TICKET IMAGEN (PROTEGIDA) - CORREGIDO: TOTAL VES = SUBTOTAL + IVA
+# API: GENERAR TICKET IMAGEN (PROTEGIDA) - 🔥 CORRECCIÓN ZONA HORARIA
 # ============================================================
 
 @api_bp.route('/generar-ticket/<int:venta_id>', methods=['GET'])
@@ -2335,6 +2514,14 @@ def generar_ticket_imagen(venta_id):
         'usd_personalizado': 'Dólar Personalizado'
     }
     metodo_cobro_legible = metodo_cobro_map.get(venta.metodo_cobro, venta.metodo_cobro)
+    
+    # 🔥 CORRECCIÓN: Obtener fecha local
+    if venta.fecha.tzinfo:
+        fecha_local = venta.fecha.astimezone(pytz.timezone('America/Caracas'))
+    else:
+        fecha_local = pytz.timezone('America/Caracas').localize(venta.fecha)
+    fecha_formateada = fecha_local.strftime('%d/%m/%Y, %I:%M:%S %p')
+    fecha_formateada = fecha_formateada.replace('AM', 'a. m.').replace('PM', 'p. m.')
     
     base_width = 540
     base_padding = 30
@@ -2422,8 +2609,6 @@ def generar_ticket_imagen(venta_id):
     
     draw.text((width//2, y), f"NOTA DE ENTREGA N°: {venta.numero_ticket:05d}", fill='black', font=font_bold, anchor='mt')
     y += 20 * scale
-    fecha_formateada = venta.fecha.strftime('%d/%m/%Y, %I:%M:%S %p')
-    fecha_formateada = fecha_formateada.replace('AM', 'a. m.').replace('PM', 'p. m.')
     draw.text((width//2, y), f"Fecha: {fecha_formateada}", fill='black', font=font_small, anchor='mt')
     y += 18 * scale
     draw.line([(padding, y), (width-padding, y)], fill='black', width=1*scale)
@@ -3764,6 +3949,7 @@ def agregar_pago_apartado(id):
 
 # ============================================================
 # 🔥 ENDPOINT FINALIZAR APARTADO (CORREGIDO: TOTAL VES = SUBTOTAL + IVA)
+# 🔥 MODIFICADO: uso de obtener_proximo_numero_ticket()
 # ============================================================
 @api_bp.route('/apartados/<int:id>/finalizar', methods=['POST'])
 @login_required
@@ -3794,14 +3980,15 @@ def finalizar_apartado(id):
         metodo_cobro = apartado.metodo_cobro_inicial
         metodo_pago = apartado.metodo_pago_inicial
     
+    # 🔥 NUEVO: Obtener el próximo número de ticket disponible
+    nuevo_ticket = obtener_proximo_numero_ticket()
+    
+    # Opcional: actualizar Configuracion para compatibilidad
     config = Configuracion.query.filter_by(clave='ultimo_ticket').first()
     if config:
-        ultimo_ticket = int(config.valor)
-        nuevo_ticket = ultimo_ticket + 1
         config.valor = str(nuevo_ticket)
     else:
-        nuevo_ticket = 1
-        config = Configuracion(clave='ultimo_ticket', valor='1')
+        config = Configuracion(clave='ultimo_ticket', valor=str(nuevo_ticket))
         db.session.add(config)
     db.session.commit()
     

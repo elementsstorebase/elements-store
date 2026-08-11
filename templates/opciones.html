@@ -39,6 +39,24 @@
                         <i class="fas fa-plus mr-2"></i>Nueva Categoría
                     </button>
                 </div>
+                <!-- NUEVO: Búsqueda y paginación para categorías -->
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                    <div class="flex items-center gap-2 w-full sm:w-auto">
+                        <input type="text" id="buscar-categorias" placeholder="Buscar categoría..." class="input-field w-full sm:w-64">
+                        <button id="btn-buscar-categorias" class="btn-primary" style="padding:0.6rem 1rem;">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label for="per-page-categorias" class="text-sm text-gray-600">Mostrar:</label>
+                        <select id="per-page-categorias" class="input-field w-20">
+                            <option value="10">10</option>
+                            <option value="25" selected>25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
+                    </div>
+                </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
                         <thead>
@@ -55,6 +73,21 @@
                         </tbody>
                     </table>
                 </div>
+                <!-- NUEVO: Controles de paginación para categorías -->
+                <div id="paginacion-categorias" class="flex items-center justify-between mt-4">
+                    <div class="text-sm text-gray-600">
+                        <span id="info-categorias">Mostrando 0 - 0 de 0</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button id="prev-categorias" class="btn-secondary" style="padding:0.4rem 1rem; background:#E2E8F0; border-radius:9999px;" disabled>
+                            <i class="fas fa-chevron-left"></i> Anterior
+                        </button>
+                        <span id="page-info-categorias" class="text-sm text-gray-700">Página 1 de 1</span>
+                        <button id="next-categorias" class="btn-secondary" style="padding:0.4rem 1rem; background:#E2E8F0; border-radius:9999px;" disabled>
+                            Siguiente <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -66,6 +99,24 @@
                     <button class="btn-primary" onclick="abrirModalSubcategoria()">
                         <i class="fas fa-plus mr-2"></i>Nueva Subcategoría
                     </button>
+                </div>
+                <!-- NUEVO: Búsqueda y paginación para subcategorías -->
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                    <div class="flex items-center gap-2 w-full sm:w-auto">
+                        <input type="text" id="buscar-subcategorias" placeholder="Buscar subcategoría..." class="input-field w-full sm:w-64">
+                        <button id="btn-buscar-subcategorias" class="btn-primary" style="padding:0.6rem 1rem;">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label for="per-page-subcategorias" class="text-sm text-gray-600">Mostrar:</label>
+                        <select id="per-page-subcategorias" class="input-field w-20">
+                            <option value="10">10</option>
+                            <option value="25" selected>25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
+                    </div>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
@@ -82,6 +133,21 @@
                         </tbody>
                     </table>
                 </div>
+                <!-- NUEVO: Controles de paginación para subcategorías -->
+                <div id="paginacion-subcategorias" class="flex items-center justify-between mt-4">
+                    <div class="text-sm text-gray-600">
+                        <span id="info-subcategorias">Mostrando 0 - 0 de 0</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button id="prev-subcategorias" class="btn-secondary" style="padding:0.4rem 1rem; background:#E2E8F0; border-radius:9999px;" disabled>
+                            <i class="fas fa-chevron-left"></i> Anterior
+                        </button>
+                        <span id="page-info-subcategorias" class="text-sm text-gray-700">Página 1 de 1</span>
+                        <button id="next-subcategorias" class="btn-secondary" style="padding:0.4rem 1rem; background:#E2E8F0; border-radius:9999px;" disabled>
+                            Siguiente <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -93,6 +159,24 @@
                     <button class="btn-primary" onclick="abrirModalMarca()">
                         <i class="fas fa-plus mr-2"></i>Nueva Marca
                     </button>
+                </div>
+                <!-- NUEVO: Búsqueda y paginación para marcas -->
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                    <div class="flex items-center gap-2 w-full sm:w-auto">
+                        <input type="text" id="buscar-marcas" placeholder="Buscar marca..." class="input-field w-full sm:w-64">
+                        <button id="btn-buscar-marcas" class="btn-primary" style="padding:0.6rem 1rem;">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label for="per-page-marcas" class="text-sm text-gray-600">Mostrar:</label>
+                        <select id="per-page-marcas" class="input-field w-20">
+                            <option value="10">10</option>
+                            <option value="25" selected>25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
+                    </div>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
@@ -109,6 +193,21 @@
                         </tbody>
                     </table>
                 </div>
+                <!-- NUEVO: Controles de paginación para marcas -->
+                <div id="paginacion-marcas" class="flex items-center justify-between mt-4">
+                    <div class="text-sm text-gray-600">
+                        <span id="info-marcas">Mostrando 0 - 0 de 0</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button id="prev-marcas" class="btn-secondary" style="padding:0.4rem 1rem; background:#E2E8F0; border-radius:9999px;" disabled>
+                            <i class="fas fa-chevron-left"></i> Anterior
+                        </button>
+                        <span id="page-info-marcas" class="text-sm text-gray-700">Página 1 de 1</span>
+                        <button id="next-marcas" class="btn-secondary" style="padding:0.4rem 1rem; background:#E2E8F0; border-radius:9999px;" disabled>
+                            Siguiente <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -120,6 +219,24 @@
                     <button class="btn-primary" onclick="abrirModalTalla()">
                         <i class="fas fa-plus mr-2"></i>Nueva Talla
                     </button>
+                </div>
+                <!-- NUEVO: Búsqueda y paginación para tallas -->
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                    <div class="flex items-center gap-2 w-full sm:w-auto">
+                        <input type="text" id="buscar-tallas" placeholder="Buscar talla..." class="input-field w-full sm:w-64">
+                        <button id="btn-buscar-tallas" class="btn-primary" style="padding:0.6rem 1rem;">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label for="per-page-tallas" class="text-sm text-gray-600">Mostrar:</label>
+                        <select id="per-page-tallas" class="input-field w-20">
+                            <option value="10">10</option>
+                            <option value="25" selected>25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
+                    </div>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm">
@@ -135,6 +252,21 @@
                             <tr><td colspan="4" class="text-center py-4 text-gray-400">Cargando...</td></tr>
                         </tbody>
                     </table>
+                </div>
+                <!-- NUEVO: Controles de paginación para tallas -->
+                <div id="paginacion-tallas" class="flex items-center justify-between mt-4">
+                    <div class="text-sm text-gray-600">
+                        <span id="info-tallas">Mostrando 0 - 0 de 0</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button id="prev-tallas" class="btn-secondary" style="padding:0.4rem 1rem; background:#E2E8F0; border-radius:9999px;" disabled>
+                            <i class="fas fa-chevron-left"></i> Anterior
+                        </button>
+                        <span id="page-info-tallas" class="text-sm text-gray-700">Página 1 de 1</span>
+                        <button id="next-tallas" class="btn-secondary" style="padding:0.4rem 1rem; background:#E2E8F0; border-radius:9999px;" disabled>
+                            Siguiente <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

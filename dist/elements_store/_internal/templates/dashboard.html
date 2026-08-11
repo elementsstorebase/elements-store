@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- SECCIÓN 1: VENTAS EN DÓLARES (USD) -->
+    <div>
+        <h3 class="text-xl font-semibold text-gray-700 mb-3">💵 Ventas en Dólares (USD)</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <!-- Diario USD -->
+            <div class="card">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm">Venta Diaria (USD)</p>
+                        <h3 class="text-2xl font-bold" id="venta-diaria-usd">$0.00</h3>
+                        <p class="text-xs text-gray-400">Ref VES: <span id="venta-diaria-usd-ref-ves" class="text-gray-500">Bs 0,00</span></p>
+                        <p class="text-xs text-gray-400">Ref EUR: <span id="venta-diaria-usd-ref-eur" class="text-gray-500">€ 0.00</span></p>
+                    </div>
+                    <i class="fas fa-calendar-day text-3xl text-indigo-300"></i>
+                </div>
+            </div>
+
+            <!-- Semanal USD -->
+            <div class="card">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm">Venta Semanal (USD)</p>
+                        <h3 class="text-2xl font-bold" id="venta-semanal-usd">$0.00</h3>
+                        <p class="text-xs text-gray-400">Ref VES: <span id="venta-semanal-usd-ref-ves" class="text-gray-500">Bs 0,00</span></p>
+                        <p class="text-xs text-gray-400">Ref EUR: <span id="venta-semanal-usd-ref-eur" class="text-gray-500">€ 0.00</span></p>
+                    </div>
+                    <i class="fas fa-calendar-week text-3xl text-indigo-300"></i>
+                </div>
+            </div>
+
+            <!-- Mensual USD -->
+            <div class="card">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm">Venta Mensual (USD)</p>
+                        <h3 class="text-2xl font-bold" id="venta-mensual-usd">$0.00</h3>
+                        <p class="text-xs text-gray-400">Ref VES: <span id="venta-mensual-usd-ref-ves" class="text-gray-500">Bs 0,00</span></p>
+                        <p class="text-xs text-gray-400">Ref EUR: <span id="venta-mensual-usd-ref-eur" class="text-gray-500">€ 0.00</span></p>
+                    </div>
+                    <i class="fas fa-calendar-alt text-3xl text-indigo-300"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SECCIÓN 2: VENTAS EN BOLÍVARES (VES) -->
+    <div>
+        <h3 class="text-xl font-semibold text-gray-700 mb-3">💰 Ventas en Bolívares (VES)</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <!-- Diario VES -->
+            <div class="card">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm">Venta Diaria (VES)</p>
+                        <h3 class="text-2xl font-bold" id="venta-diaria-ves">Bs 0.00</h3>
+                        <p class="text-xs text-gray-400">Ref USD: <span id="venta-diaria-ves-ref-usd" class="text-gray-500">$0.00</span></p>
+                        <p class="text-xs text-gray-400">Ref EUR: <span id="venta-diaria-ves-ref-eur" class="text-gray-500">€ 0.00</span></p>
+                    </div>
+                    <i class="fas fa-calendar-day text-3xl text-green-300"></i>
+                </div>
+            </div>
+
+            <!-- Semanal VES -->
+            <div class="card">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm">Venta Semanal (VES)</p>
+                        <h3 class="text-2xl font-bold" id="venta-semanal-ves">Bs 0.00</h3>
+                        <p class="text-xs text-gray-400">Ref USD: <span id="venta-semanal-ves-ref-usd" class="text-gray-500">$0.00</span></p>
+                        <p class="text-xs text-gray-400">Ref EUR: <span id="venta-semanal-ves-ref-eur" class="text-gray-500">€ 0.00</span></p>
+                    </div>
+                    <i class="fas fa-calendar-week text-3xl text-green-300"></i>
+                </div>
+            </div>
+
+            <!-- Mensual VES -->
+            <div class="card">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm">Venta Mensual (VES)</p>
+                        <h3 class="text-2xl font-bold" id="venta-mensual-ves">Bs 0.00</h3>
+                        <p class="text-xs text-gray-400">Ref USD: <span id="venta-mensual-ves-ref-usd" class="text-gray-500">$0.00</span></p>
+                        <p class="text-xs text-gray-400">Ref EUR: <span id="venta-mensual-ves-ref-eur" class="text-gray-500">€ 0.00</span></p>
+                    </div>
+                    <i class="fas fa-calendar-alt text-3xl text-green-300"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SECCIÓN 3: STOCK CRÍTICO + GRÁFICOS -->
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div class="lg:col-span-1">
+            <div class="card">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm">Stock Crítico</p>
+                        <h3 class="text-2xl font-bold" id="stock-critico">0</h3>
+                        <p class="text-xs text-gray-400">productos sin stock</p>
+                    </div>
+                    <i class="fas fa-exclamation-triangle text-3xl text-orange-300"></i>
+                </div>
+            </div>
+        </div>
+        <div class="lg:col-span-3">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="card">
+                    <h4 class="font-semibold text-gray-700 mb-3">Histórico de Ventas (últimos 7 días)</h4>
+                    <div style="position: relative; height: 250px; width: 100%;">
+                        <canvas id="ventasChart"></canvas>
+                    </div>
+                </div>
+                <div class="card">
+                    <h4 class="font-semibold text-gray-700 mb-3">Top Productos</h4>
+                    <div style="position: relative; height: 200px; width: 100%;">
+                        <canvas id="topProductosChart"></canvas>
+                    </div>
+                    <ul id="top-productos-dashboard" class="divide-y divide-gray-100 mt-3">
+                        <li class="py-2 text-gray-600">Cargando...</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

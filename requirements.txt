@@ -1,10 +1,11 @@
 Flask==2.3.3
 requests==2.31.0
 beautifulsoup4==4.12.2
-Pillow>=10.2.0
+Pillow==10.2.0
 python-dotenv==1.0.0
-Flask-SQLAlchemy
-Flask-Migrate
-psycopg2-binary
-gunicorn
-pytz
+Flask-SQLAlchemy==3.0.5
+Flask-Migrate==4.0.4
+psycopg2-binary==2.9.9
+gunicorn==21.2.0
+pytz==2023.3
+pywin32==306

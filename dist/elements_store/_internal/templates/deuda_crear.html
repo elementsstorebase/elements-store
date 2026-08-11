@@ -1,0 +1,329 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="card">
+        <div class="flex items-center gap-3 mb-6">
+            <a href="/admin/deudas" class="text-gray-400 hover:text-gray-600 transition-colors">
+                <i class="fas fa-arrow-left text-lg"></i>
+            </a>
+            <h3 class="text-xl font-semibold text-gray-800">Nuevo Apartado</h3>
+            <span class="text-sm text-gray-400 ml-auto">Cliente fijo - Apartado de producto</span>
+        </div>
+
+        <form id="form-deuda-crear" class="space-y-6">
+            <!-- ============================================ -->
+            <!-- SECCIÓN 1: DATOS DEL CLIENTE -->
+            <!-- ============================================ -->
+            <div class="border-b border-gray-200 pb-4">
+                <h4 class="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                    <i class="fas fa-user text-indigo-500"></i> Datos del Cliente
+                </h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="relative md:col-span-2">
+                        <label class="block text-sm font-medium text-gray-700">Buscar Cliente <span class="text-red-500">*</span></label>
+                        <div class="relative">
+                            <input type="text" id="deuda-cliente-buscar" class="input-field w-full" placeholder="Escribe nombre o cédula..." autocomplete="off">
+                            <div id="sugerencias-clientes" class="absolute z-20 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 hidden max-h-60 overflow-y-auto"></div>
+                        </div>
+                        <input type="hidden" id="deuda-cliente-id">
+                    </div>
+                    <div id="cliente-seleccionado-info" class="md:col-span-2 hidden">
+                        <div class="bg-indigo-50 p-3 rounded-lg grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div><span class="font-medium">Nombre:</span> <span id="cliente-info-nombre"></span></div>
+                            <div><span class="font-medium">Apellido:</span> <span id="cliente-info-apellido"></span></div>
+                            <div><span class="font-medium">Cédula:</span> <span id="cliente-info-cedula"></span></div>
+                            <div><span class="font-medium">Teléfono:</span> <span id="cliente-info-telefono"></span></div>
+                            <div class="md:col-span-2"><span class="font-medium">Dirección:</span> <span id="cliente-info-direccion"></span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============================================ -->
+            <!-- SECCIÓN 2: DATOS DEL PRODUCTO -->
+            <!-- ============================================ -->
+            <div class="border-b border-gray-200 pb-4">
+                <h4 class="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                    <i class="fas fa-box text-indigo-500"></i> Datos del Producto
+                </h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="relative md:col-span-2">
+                        <label class="block text-sm font-medium text-gray-700">Buscar Producto <span class="text-red-500">*</span></label>
+                        <div class="relative">
+                            <input type="text" id="deuda-producto-buscar" class="input-field w-full" placeholder="Escribe el nombre del producto..." autocomplete="off">
+                            <div id="sugerencias-productos" class="absolute z-20 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 hidden max-h-60 overflow-y-auto"></div>
+                        </div>
+                        <input type="hidden" id="deuda-producto-id">
+                    </div>
+                    <div id="producto-seleccionado-info" class="md:col-span-2 hidden">
+                        <div class="bg-blue-50 p-3 rounded-lg grid grid-cols-1 md:grid-cols-4 gap-3">
+                            <div><span class="font-medium">Producto:</span> <span id="producto-info-nombre"></span></div>
+                            <div><span class="font-medium">Categoría:</span> <span id="producto-info-categoria"></span></div>
+                            <div><span class="font-medium">Marca:</span> <span id="producto-info-marca"></span></div>
+                            <div><span class="font-medium">Talla:</span> <span id="producto-info-talla"></span></div>
+                            <div><span class="font-medium">Precio USD:</span> $<span id="producto-info-precio"></span></div>
+                            <div><span class="font-medium">Stock disponible:</span> <span id="producto-info-stock"></span></div>
+                            <div class="md:col-span-2"><span class="font-medium">Costo USD:</span> $<span id="producto-info-costo"></span></div>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Cantidad a apartar <span class="text-red-500">*</span></label>
+                        <input type="number" id="deuda-cantidad" class="input-field" value="1" min="1" required>
+                    </div>
+                    <div class="flex items-center space-x-2 mt-6">
+                        <input type="checkbox" id="deuda-descontar-stock" checked>
+                        <label for="deuda-descontar-stock" class="text-sm font-medium text-gray-700">
+                            Descontar del stock al apartar
+                        </label>
+                    </div>
+                    <!-- Mostrar total en USD (fijo) -->
+                    <div class="md:col-span-2 bg-gray-50 p-3 rounded-lg">
+                        <p class="text-sm text-gray-600">Total en USD (subtotal): <strong id="total-usd-display" class="text-indigo-600 text-lg">$0.00</strong></p>
+                        <p class="text-xs text-gray-400">Calculado como: Cantidad × Precio USD</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============================================ -->
+            <!-- SECCIÓN 3: ABONO INICIAL (DOS PESTAÑAS) -->
+            <!-- ============================================ -->
+            <div class="border-b border-gray-200 pb-4">
+                <h4 class="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                    <i class="fas fa-hand-holding-usd text-indigo-500"></i> Abono Inicial
+                </h4>
+
+                <!-- Pestañas de selección de moneda -->
+                <div class="flex border-b border-gray-200 mb-4">
+                    <button type="button" class="tab-abono-btn px-4 py-2 text-sm font-medium text-indigo-600 border-b-2 border-indigo-600 transition-all" data-tab="ves">
+                        <i class="fas fa-bs mr-1"></i> Bolívares (VES)
+                    </button>
+                    <button type="button" class="tab-abono-btn px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 border-b-2 border-transparent hover:border-gray-300 transition-all" data-tab="usd">
+                        <i class="fas fa-dollar-sign mr-1"></i> Dólares (USD)
+                    </button>
+                </div>
+
+                <!-- ============================================ -->
+                <!-- PESTAÑA VES (Bolívares) -->
+                <!-- ============================================ -->
+                <div id="tab-abono-ves" class="tab-abono-content space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Total en VES</label>
+                            <input type="text" id="deuda-total-ves" class="input-field bg-gray-100" readonly>
+                            <p class="text-xs text-gray-400">Se calcula según la tasa seleccionada.</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Método de Cobro (VES)</label>
+                            <select id="deuda-metodo-cobro-ves" class="input-field">
+                                <option value="bcv_usd">Tasa BCV USD</option>
+                                <option value="bcv_eur">Tasa BCV EUR</option>
+                                <option value="personalizada">Tasa Personalizada</option>
+                                <option value="bs_personalizado">Bs Personalizado</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Contenedor para Bolívar Personalizado -->
+                    <div id="bs-personalizado-container-ves" class="hidden grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Monto en Bs (Personalizado) <span class="text-red-500">*</span></label>
+                            <input type="number" id="deuda-bs-personalizado-input-ves" step="0.01" class="input-field" placeholder="Ingrese el monto en Bs">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Equivalente en USD (Tasa BCV USD)</label>
+                            <input type="text" id="deuda-bs-equivalente-usd-ves" class="input-field bg-gray-100" readonly>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Porcentaje de Abono Inicial (%)</label>
+                            <select id="deuda-abono-porcentaje-ves" class="input-field">
+                                <option value="10">10%</option>
+                                <option value="20">20%</option>
+                                <option value="30" selected>30%</option>
+                                <option value="40">40%</option>
+                                <option value="50">50%</option>
+                                <option value="60">60%</option>
+                                <option value="70">70%</option>
+                                <option value="80">80%</option>
+                                <option value="90">90%</option>
+                                <option value="personalizado">Personalizado</option>
+                            </select>
+                            <div id="deuda-abono-porcentaje-personalizado-container-ves" class="mt-2 hidden">
+                                <label class="block text-sm font-medium text-gray-700">Porcentaje personalizado (%)</label>
+                                <input type="number" id="deuda-abono-porcentaje-personalizado-ves" class="input-field" min="1" max="100" placeholder="Ej: 25">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Abono Inicial (VES)</label>
+                            <input type="text" id="deuda-abono-monto-ves" class="input-field bg-gray-100" readonly>
+                            <p class="text-xs text-gray-400">Calculado como: Total VES × Porcentaje</p>
+                        </div>
+                    </div>
+
+                    <!-- Referencias desde VES -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Abono Inicial en USD (Tasa BCV USD)</label>
+                            <input type="text" id="deuda-abono-usd-ves" class="input-field bg-gray-100" readonly>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Abono Inicial en EUR (Tasa BCV EUR)</label>
+                            <input type="text" id="deuda-abono-eur-ves" class="input-field bg-gray-100" readonly>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Método de Pago (VES)</label>
+                        <select id="deuda-metodo-pago-ves" class="input-field">
+                            <option value="Efectivo VES">Efectivo VES</option>
+                            <option value="Pago Móvil">Pago Móvil</option>
+                            <option value="Transferencia">Transferencia</option>
+                            <option value="Punto de Venta">Punto de Venta</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- ============================================ -->
+                <!-- PESTAÑA USD (Dólares) -->
+                <!-- ============================================ -->
+                <div id="tab-abono-usd" class="tab-abono-content hidden space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Total en USD (fijo)</label>
+                            <input type="text" id="deuda-total-usd" class="input-field bg-gray-100" readonly>
+                            <p class="text-xs text-gray-400">Calculado como: Cantidad × Precio USD</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Método de Cobro (USD)</label>
+                            <select id="deuda-metodo-cobro-usd" class="input-field">
+                                <option value="usd">Precio en Dólares ($)</option>
+                                <option value="usd_personalizado">Dólar Personalizado</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Contenedor para Dólar Personalizado -->
+                    <div id="usd-personalizado-container-usd" class="hidden grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Monto en USD (Personalizado) <span class="text-red-500">*</span></label>
+                            <input type="number" id="deuda-usd-personalizado-input-usd" step="0.01" class="input-field" placeholder="Ingrese el monto en USD">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Equivalente en VES (Tasa BCV USD)</label>
+                            <input type="text" id="deuda-usd-equivalente-ves-usd" class="input-field bg-gray-100" readonly>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Porcentaje de Abono Inicial (%)</label>
+                            <select id="deuda-abono-porcentaje-usd" class="input-field">
+                                <option value="10">10%</option>
+                                <option value="20">20%</option>
+                                <option value="30" selected>30%</option>
+                                <option value="40">40%</option>
+                                <option value="50">50%</option>
+                                <option value="60">60%</option>
+                                <option value="70">70%</option>
+                                <option value="80">80%</option>
+                                <option value="90">90%</option>
+                                <option value="personalizado">Personalizado</option>
+                            </select>
+                            <div id="deuda-abono-porcentaje-personalizado-container-usd" class="mt-2 hidden">
+                                <label class="block text-sm font-medium text-gray-700">Porcentaje personalizado (%)</label>
+                                <input type="number" id="deuda-abono-porcentaje-personalizado-usd" class="input-field" min="1" max="100" placeholder="Ej: 25">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Abono Inicial (USD)</label>
+                            <input type="text" id="deuda-abono-monto-usd" class="input-field bg-gray-100" readonly>
+                            <p class="text-xs text-gray-400">Calculado como: Total USD × Porcentaje</p>
+                        </div>
+                    </div>
+
+                    <!-- Referencias desde USD -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Abono Inicial en VES (Tasa BCV USD)</label>
+                            <input type="text" id="deuda-abono-ves-usd" class="input-field bg-gray-100" readonly>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Abono Inicial en EUR (Tasa BCV EUR)</label>
+                            <input type="text" id="deuda-abono-eur-usd" class="input-field bg-gray-100" readonly>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Método de Pago (USD)</label>
+                        <select id="deuda-metodo-pago-usd" class="input-field">
+                            <option value="Efectivo USD">Efectivo USD</option>
+                            <option value="Dólar Digital">Dólar Digital</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============================================ -->
+            <!-- SECCIÓN 4: PERIODO Y FECHA LÍMITE -->
+            <!-- ============================================ -->
+            <div class="pb-4">
+                <h4 class="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                    <i class="fas fa-calendar-alt text-indigo-500"></i> Periodo de Pago
+                </h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Tipo de Periodo <span class="text-red-500">*</span></label>
+                        <select id="deuda-periodo-tipo" class="input-field">
+                            <option value="personalizado">Personalizado (fecha fija)</option>
+                            <option value="fin_mes">Fin de mes</option>
+                        </select>
+                    </div>
+                    <div id="deuda-fecha-container">
+                        <label class="block text-sm font-medium text-gray-700">Fecha Límite de Pago <span class="text-red-500">*</span></label>
+                        <input type="date" id="deuda-fecha-limite" class="input-field">
+                    </div>
+                </div>
+                <div id="deuda-info-periodo" class="mt-2 text-sm text-gray-500">
+                    <i class="fas fa-info-circle mr-1"></i>
+                    <span id="deuda-info-texto">Seleccione una fecha límite para el pago completo.</span>
+                </div>
+            </div>
+
+            <!-- ============================================ -->
+            <!-- RESUMEN DEL APARTADO (MEJORADO) -->
+            <!-- ============================================ -->
+            <div class="bg-amber-50 p-4 rounded-lg border border-amber-200">
+                <h4 class="font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                    <i class="fas fa-calculator text-amber-600"></i> Resumen del Apartado
+                </h4>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div><span class="text-gray-500">Total producto (USD):</span> <span class="font-semibold" id="resumen-total-usd">$0.00</span></div>
+                    <div><span class="text-gray-500">Abono inicial (USD):</span> <span class="font-semibold text-green-600" id="resumen-abono-usd">$0.00</span></div>
+                    <div><span class="text-gray-500">Saldo restante (USD):</span> <span class="font-semibold text-amber-600" id="resumen-saldo-usd">$0.00</span></div>
+                    <div><span class="text-gray-500">Stock después del apartado:</span> <span class="font-semibold" id="resumen-stock">0</span></div>
+                    <!-- Referencias adicionales -->
+                    <div><span class="text-gray-500">Abono inicial (Bs USD):</span> <span class="font-semibold text-blue-600" id="resumen-abono-bs-usd">Bs 0.00</span></div>
+                    <div><span class="text-gray-500">Abono inicial (Bs EUR):</span> <span class="font-semibold text-purple-600" id="resumen-abono-bs-eur">Bs 0.00</span></div>
+                    <div><span class="text-gray-500">Saldo restante (Bs USD):</span> <span class="font-semibold text-amber-600" id="resumen-saldo-bs-usd">Bs 0.00</span></div>
+                    <div><span class="text-gray-500">Saldo restante (Bs EUR):</span> <span class="font-semibold text-amber-600" id="resumen-saldo-bs-eur">Bs 0.00</span></div>
+                </div>
+            </div>
+
+            <!-- Botones -->
+            <div class="flex space-x-3">
+                <button type="submit" class="btn-primary flex-1 py-3 text-lg">
+                    <i class="fas fa-save mr-1"></i> Guardar Apartado
+                </button>
+                <a href="/admin/deudas" class="btn-secondary flex-1 text-center py-3 text-lg">
+                    Cancelar
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/deudas.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,407 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <div class="card">
+        <div class="flex items-center gap-3 mb-6">
+            <a href="/admin/deudas" class="text-gray-400 hover:text-gray-600 transition-colors">
+                <i class="fas fa-arrow-left text-lg"></i>
+            </a>
+            <h3 class="text-xl font-semibold text-gray-800">Agregar Abono</h3>
+            <span class="text-sm text-gray-400 ml-auto">Deuda #{{ deuda.id }}</span>
+        </div>
+
+        <!-- Información resumida de la deuda -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
+            <div>
+                <p class="text-xs text-gray-400">Cliente</p>
+                <p class="font-medium">{{ deuda.cliente.nombre }} {{ deuda.cliente.apellido }}</p>
+            </div>
+            <div>
+                <p class="text-xs text-gray-400">Producto</p>
+                <p class="font-medium">{{ deuda.producto.nombre }}</p>
+            </div>
+            <div>
+                <p class="text-xs text-gray-400">Saldo Restante</p>
+                <p class="font-medium text-amber-600">${{ "%.2f"|format(deuda.saldo_restante) }}</p>
+                <p class="text-xs text-gray-400" id="abono-saldo-bs">Bs 0.00</p>
+            </div>
+        </div>
+
+        <form id="form-agregar-abono" class="space-y-4">
+            <input type="hidden" id="abono-deuda-id" value="{{ deuda.id }}">
+            <input type="hidden" id="abono-saldo-restante" value="{{ deuda.saldo_restante }}">
+
+            <!-- ============================================ -->
+            <!-- 🔥 NUEVO: Selector de moneda y tasas -->
+            <!-- ============================================ -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Moneda del Abono <span class="text-red-500">*</span></label>
+                    <select id="abono-moneda" class="input-field">
+                        <option value="USD">Dólares (USD)</option>
+                        <option value="VES">Bolívares (VES)</option>
+                    </select>
+                </div>
+                <div class="flex items-end space-x-3 text-sm">
+                    <span class="text-gray-500">Tasa BCV USD: <strong id="abono-tasa-usd-display">0.00</strong></span>
+                    <span class="text-gray-500">Tasa BCV EUR: <strong id="abono-tasa-eur-display">0.00</strong></span>
+                </div>
+            </div>
+
+            <!-- ============================================ -->
+            <!-- Monto del abono (editable según moneda) -->
+            <!-- ============================================ -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700" id="abono-monto-label">Monto en USD <span class="text-red-500">*</span></label>
+                <input type="number" id="abono-monto" step="0.01" class="input-field" placeholder="0.00" required>
+                <p class="text-xs text-gray-400 mt-1" id="abono-monto-help">Máximo: ${{ "%.2f"|format(deuda.saldo_restante) }}</p>
+            </div>
+
+            <!-- ============================================ -->
+            <!-- Equivalente en la otra moneda (calculado automáticamente) -->
+            <!-- ============================================ -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700" id="abono-monto-ves-label">Equivalente en VES</label>
+                <input type="text" id="abono-monto-ves" class="input-field bg-gray-100" readonly>
+            </div>
+
+            <!-- ============================================ -->
+            <!-- Referencias de conversión (según moneda) -->
+            <!-- ============================================ -->
+            <div id="abono-referencias-usd" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Equivalente en Bs (Tasa USD BCV)</label>
+                    <input type="text" id="abono-ref-ves-usd" class="input-field bg-gray-100" readonly>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Equivalente en Bs (Tasa EUR BCV)</label>
+                    <input type="text" id="abono-ref-ves-eur" class="input-field bg-gray-100" readonly>
+                </div>
+            </div>
+            <div id="abono-referencias-ves" class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Equivalente en USD (Tasa BCV USD)</label>
+                    <input type="text" id="abono-ref-usd" class="input-field bg-gray-100" readonly>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Equivalente en EUR (Tasa BCV EUR)</label>
+                    <input type="text" id="abono-ref-eur" class="input-field bg-gray-100" readonly>
+                </div>
+            </div>
+
+            <!-- ============================================ -->
+            <!-- Métodos de cobro y pago (filtrados por moneda) -->
+            <!-- ============================================ -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Método de Cobro <span class="text-red-500">*</span></label>
+                <select id="abono-metodo-cobro" class="input-field">
+                    <optgroup label="USD">
+                        <option value="usd">Precio en Dólares ($)</option>
+                        <option value="usd_personalizado">Dólar Personalizado</option>
+                    </optgroup>
+                    <optgroup label="VES">
+                        <option value="bcv_usd">Tasa BCV USD</option>
+                        <option value="bcv_eur">Tasa BCV EUR</option>
+                        <option value="personalizada">Tasa Personalizada</option>
+                        <option value="bs_personalizado">Bs Personalizado</option>
+                    </optgroup>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Método de Pago <span class="text-red-500">*</span></label>
+                <select id="abono-metodo-pago" class="input-field">
+                    <optgroup label="USD">
+                        <option value="Efectivo USD">Efectivo USD</option>
+                        <option value="Dólar Digital">Dólar Digital</option>
+                    </optgroup>
+                    <optgroup label="VES">
+                        <option value="Efectivo VES">Efectivo VES</option>
+                        <option value="Pago Móvil">Pago Móvil</option>
+                        <option value="Transferencia">Transferencia</option>
+                        <option value="Punto de Venta">Punto de Venta</option>
+                    </optgroup>
+                </select>
+            </div>
+
+            <!-- Observaciones -->
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Observaciones</label>
+                <input type="text" id="abono-observaciones" class="input-field" placeholder="Observaciones sobre este abono (opcional)">
+            </div>
+
+            <!-- Botones -->
+            <div class="flex space-x-3 pt-4">
+                <button type="submit" class="btn-primary flex-1">Guardar Abono</button>
+                <a href="/admin/deudas" class="btn-secondary flex-1 text-center">Cancelar</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/deudas.js') }}"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // ============================================================
+        // REFERENCIAS
+        // ============================================================
+        const form = document.getElementById('form-agregar-abono');
+        const deudaId = document.getElementById('abono-deuda-id').value;
+        const saldoRestante = parseFloat(document.getElementById('abono-saldo-restante').value) || 0;
+
+        const monedaSelect = document.getElementById('abono-moneda');
+        const montoInput = document.getElementById('abono-monto');
+        const montoVesInput = document.getElementById('abono-monto-ves');
+        const refVesUsd = document.getElementById('abono-ref-ves-usd');
+        const refVesEur = document.getElementById('abono-ref-ves-eur');
+        const refUsd = document.getElementById('abono-ref-usd');
+        const refEur = document.getElementById('abono-ref-eur');
+        const referenciasUsd = document.getElementById('abono-referencias-usd');
+        const referenciasVes = document.getElementById('abono-referencias-ves');
+        const montoLabel = document.getElementById('abono-monto-label');
+        const montoVesLabel = document.getElementById('abono-monto-ves-label');
+        const metodoCobro = document.getElementById('abono-metodo-cobro');
+        const metodoPago = document.getElementById('abono-metodo-pago');
+        const tasaUsdDisplay = document.getElementById('abono-tasa-usd-display');
+        const tasaEurDisplay = document.getElementById('abono-tasa-eur-display');
+        const saldoBsDisplay = document.getElementById('abono-saldo-bs');
+
+        let tasaUsd = 1;
+        let tasaEur = 1;
+
+        // ============================================================
+        // OBTENER TASAS
+        // ============================================================
+        function obtenerTasas() {
+            fetch('/api/tasas')
+                .then(r => r.json())
+                .then(data => {
+                    tasaUsd = data.bcv_usd || 1;
+                    tasaEur = data.bcv_eur || 1;
+                    if (tasaUsdDisplay) tasaUsdDisplay.textContent = tasaUsd.toFixed(2);
+                    if (tasaEurDisplay) tasaEurDisplay.textContent = tasaEur.toFixed(2);
+                    // Actualizar saldo en Bs
+                    if (saldoBsDisplay) {
+                        saldoBsDisplay.textContent = `Bs ${formatearMontoVES(saldoRestante * tasaUsd)}`;
+                    }
+                    // Actualizar referencias si hay monto
+                    actualizarReferencias();
+                })
+                .catch(err => console.error('Error obteniendo tasas:', err));
+        }
+
+        // ============================================================
+        // FUNCIONES DE FORMATEO
+        // ============================================================
+        function formatearMonto(monto) {
+            if (monto === undefined || monto === null || isNaN(monto)) return '0,00';
+            let montoStr = monto.toFixed(2);
+            let partes = montoStr.split('.');
+            let enteros = partes[0];
+            let decimales = partes[1];
+            let enterosFormateados = enteros.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+            return `${enterosFormateados},${decimales}`;
+        }
+
+        function formatearMontoVES(monto) {
+            if (monto === undefined || monto === null || isNaN(monto)) return '0,00';
+            let montoStr = monto.toFixed(2);
+            let partes = montoStr.split('.');
+            let enteros = partes[0];
+            let decimales = partes[1];
+            let enterosFormateados = enteros.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+            return `${enterosFormateados},${decimales}`;
+        }
+
+        // ============================================================
+        // MANEJAR CAMBIO DE MONEDA
+        // ============================================================
+        function manejarCambioMoneda() {
+            const esUSD = monedaSelect.value === 'USD';
+
+            // Mostrar/ocultar referencias
+            if (referenciasUsd) referenciasUsd.classList.toggle('hidden', !esUSD);
+            if (referenciasVes) referenciasVes.classList.toggle('hidden', esUSD);
+
+            // Cambiar labels
+            if (montoLabel) {
+                montoLabel.textContent = esUSD ? 'Monto en USD *' : 'Monto en VES *';
+            }
+            if (montoVesLabel) {
+                montoVesLabel.textContent = esUSD ? 'Equivalente en VES' : 'Equivalente en USD';
+            }
+
+            // Actualizar ayuda del monto
+            const helpEl = document.getElementById('abono-monto-help');
+            if (helpEl) {
+                if (esUSD) {
+                    helpEl.textContent = `Máximo: $${formatearMonto(saldoRestante)}`;
+                } else {
+                    const maxVes = saldoRestante * tasaUsd;
+                    helpEl.textContent = `Máximo: Bs ${formatearMontoVES(maxVes)}`;
+                }
+            }
+
+            // Limpiar campos
+            montoInput.value = '';
+            montoVesInput.value = '';
+            if (refVesUsd) refVesUsd.value = '';
+            if (refVesEur) refVesEur.value = '';
+            if (refUsd) refUsd.value = '';
+            if (refEur) refEur.value = '';
+
+            // Filtrar métodos
+            filtrarMetodos(esUSD ? 'USD' : 'VES');
+        }
+
+        // ============================================================
+        // FILTRAR MÉTODOS DE COBRO Y PAGO
+        // ============================================================
+        function filtrarMetodos(moneda) {
+            if (!metodoCobro || !metodoPago) return;
+
+            // Métodos de cobro
+            const cobroOptions = metodoCobro.querySelectorAll('optgroup, option');
+            cobroOptions.forEach(opt => {
+                if (opt.tagName === 'OPTGROUP') {
+                    const label = opt.label;
+                    opt.style.display = (label === moneda) ? '' : 'none';
+                }
+            });
+            // Seleccionar primera opción visible
+            const firstCobro = metodoCobro.querySelector(`optgroup[label="${moneda}"] option`);
+            if (firstCobro) metodoCobro.value = firstCobro.value;
+
+            // Métodos de pago
+            const pagoOptions = metodoPago.querySelectorAll('optgroup, option');
+            pagoOptions.forEach(opt => {
+                if (opt.tagName === 'OPTGROUP') {
+                    const label = opt.label;
+                    opt.style.display = (label === moneda) ? '' : 'none';
+                }
+            });
+            const firstPago = metodoPago.querySelector(`optgroup[label="${moneda}"] option`);
+            if (firstPago) metodoPago.value = firstPago.value;
+        }
+
+        // ============================================================
+        // ACTUALIZAR REFERENCIAS
+        // ============================================================
+        function actualizarReferencias() {
+            const esUSD = monedaSelect.value === 'USD';
+            const monto = parseFloat(montoInput.value) || 0;
+
+            if (monto <= 0) {
+                if (montoVesInput) montoVesInput.value = '';
+                if (refVesUsd) refVesUsd.value = '';
+                if (refVesEur) refVesEur.value = '';
+                if (refUsd) refUsd.value = '';
+                if (refEur) refEur.value = '';
+                return;
+            }
+
+            if (esUSD) {
+                // Monto en USD → calcular VES y EUR
+                const montoVes = monto * tasaUsd;
+                const montoEur = monto * tasaEur;
+                if (montoVesInput) montoVesInput.value = `Bs ${formatearMontoVES(montoVes)}`;
+                if (refVesUsd) refVesUsd.value = `Bs ${formatearMontoVES(montoVes)} (Tasa USD)`;
+                if (refVesEur) refVesEur.value = `Bs ${formatearMontoVES(montoEur)} (Tasa EUR)`;
+                if (refUsd) refUsd.value = '';
+                if (refEur) refEur.value = '';
+            } else {
+                // Monto en VES → calcular USD y EUR
+                const montoUsd = monto / tasaUsd;
+                const montoEur = monto / tasaEur;
+                if (montoVesInput) montoVesInput.value = `$${formatearMonto(montoUsd)}`;
+                if (refUsd) refUsd.value = `$${formatearMonto(montoUsd)} (Tasa USD)`;
+                if (refEur) refEur.value = `€${formatearMonto(montoEur)} (Tasa EUR)`;
+                if (refVesUsd) refVesUsd.value = '';
+                if (refVesEur) refVesEur.value = '';
+            }
+        }
+
+        // ============================================================
+        // EVENTOS
+        // ============================================================
+        if (monedaSelect) {
+            monedaSelect.addEventListener('change', function() {
+                manejarCambioMoneda();
+                actualizarReferencias();
+            });
+        }
+
+        if (montoInput) {
+            montoInput.addEventListener('input', function() {
+                actualizarReferencias();
+                // Validar límite según moneda
+                const esUSD = monedaSelect.value === 'USD';
+                const monto = parseFloat(this.value) || 0;
+                let maximo = esUSD ? saldoRestante : saldoRestante * tasaUsd;
+                if (monto > maximo && maximo > 0) {
+                    this.value = maximo.toFixed(2);
+                    actualizarReferencias();
+                }
+            });
+        }
+
+        // ============================================================
+        // ENVÍO DEL FORMULARIO
+        // ============================================================
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const montoIngresado = parseFloat(montoInput.value) || 0;
+            if (montoIngresado <= 0) {
+                alert('❌ El monto debe ser mayor a 0');
+                return;
+            }
+
+            // Convertir a USD si la moneda es VES
+            let montoUsd = 0;
+            if (monedaSelect.value === 'USD') {
+                montoUsd = montoIngresado;
+            } else {
+                montoUsd = montoIngresado / tasaUsd;
+            }
+
+            // Validar que no exceda el saldo
+            if (montoUsd > saldoRestante + 0.01) {
+                alert(`❌ El monto ($${montoUsd.toFixed(2)}) excede el saldo restante ($${saldoRestante.toFixed(2)})`);
+                return;
+            }
+
+            const data = {
+                monto_usd: montoUsd,
+                metodo_cobro: metodoCobro.value,
+                metodo_pago: metodoPago.value,
+                observaciones: document.getElementById('abono-observaciones').value.trim()
+            };
+
+            fetch('/api/apartados/' + deudaId + '/pago', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            })
+            .then(function(r) {
+                if (!r.ok) throw new Error('Error al registrar abono');
+                return r.json();
+            })
+            .then(function(res) {
+                alert(res.mensaje || '✅ Abono registrado correctamente');
+                window.location.href = '/admin/deudas/' + deudaId;
+            })
+            .catch(function(err) {
+                alert('❌ Error: ' + err.message);
+            });
+        });
+
+        // ============================================================
+        // INICIALIZACIÓN
+        // ============================================================
+        obtenerTasas();
+        manejarCambioMoneda();
+    });
+</script>
+{% endblock %}

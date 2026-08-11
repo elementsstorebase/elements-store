@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Título y botón crear -->
+    <div class="flex flex-wrap justify-between items-center gap-4">
+        <div>
+            <h2 class="text-2xl font-semibold text-gray-800">Deudas Activas</h2>
+            <p class="text-sm text-gray-400">Gestión de apartados y deudas de clientes fijos</p>
+        </div>
+        <a href="/admin/deudas/crear" class="btn-primary flex items-center gap-2">
+            <i class="fas fa-plus-circle"></i> Nuevo Apartado
+        </a>
+    </div>
+
+    <!-- Filtros y búsqueda -->
+    <div class="card">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Buscar Cliente</label>
+                <input type="text" id="filtro-cliente" class="input-field" placeholder="Nombre o cédula...">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Estado</label>
+                <select id="filtro-estado" class="input-field">
+                    <option value="activo">Activo</option>
+                    <option value="pagado">Pagado</option>
+                    <option value="reintegrado">Reintegrado</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700">Fecha Límite</label>
+                <input type="date" id="filtro-fecha-limite" class="input-field">
+            </div>
+            <div class="flex items-end space-x-2">
+                <button id="btn-filtrar" class="btn-primary">🔍 Filtrar</button>
+                <button id="btn-limpiar" class="btn-secondary">Limpiar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabla de deudas -->
+    <div class="card overflow-x-auto">
+        <div class="flex justify-between items-center mb-4">
+            <span class="text-sm text-gray-500">Total de deudas activas: <span id="total-deudas" class="font-semibold">0</span></span>
+            <a href="/admin/deudas/finalizadas" class="text-sm text-indigo-600 hover:text-indigo-800 transition-colors">
+                <i class="fas fa-history mr-1"></i> Ver finalizadas
+            </a>
+        </div>
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="text-left text-gray-400 border-b">
+                    <th class="py-2 px-3">Cliente</th>
+                    <th class="py-2 px-3">Producto</th>
+                    <th class="py-2 px-3 text-center">Cantidad</th>
+                    <th class="py-2 px-3 text-right">Total USD</th>
+                    <th class="py-2 px-3 text-right">Abonado (USD)</th>
+                    <th class="py-2 px-3 text-right">Abonado Real</th>
+                    <th class="py-2 px-3 text-right">Saldo Restante</th>
+                    <th class="py-2 px-3 text-center">Fecha Límite</th>
+                    <th class="py-2 px-3 text-center">Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="tabla-deudas">
+                <tr><td colspan="9" class="text-center py-4 text-gray-400">Cargando deudas...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal Detalle de Deuda -->
+<div id="modal-detalle-deuda" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+    <div class="bg-white rounded-2xl shadow-xl max-w-4xl w-full p-6 max-h-[90vh] overflow-y-auto">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-gray-800">Detalle de Apartado</h3>
+            <button onclick="cerrarModalDetalle()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div id="detalle-contenido">
+            <div class="text-center py-4 text-gray-400">Cargando...</div>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/deudas.js') }}"></script>
+{% endblock %}

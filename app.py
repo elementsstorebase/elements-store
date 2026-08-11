@@ -10,8 +10,6 @@ import pytz  # 🔥 AÑADIDO para manejo de zona horaria
 from dotenv import load_dotenv
 from werkzeug.security import generate_password_hash
 
-load_dotenv()
-
 # ---------- CONFIGURACIÓN DE ZONA HORARIA VENEZUELA (UTC-4) ----------
 os.environ['TZ'] = 'America/Caracas'
 try:
@@ -22,23 +20,34 @@ except Exception as e:
 
 # ---------- FUNCIONES PARA RUTAS PORTABLES ----------
 def get_base_dir():
+    """Retorna la ruta base donde se encuentran los archivos."""
     if getattr(sys, 'frozen', False):
-        return os.path.dirname(sys.executable)
+        # Cuando está compilado como .exe, PyInstaller usa sys._MEIPASS
+        return sys._MEIPASS
     else:
+        # En entorno de desarrollo
         return os.path.dirname(os.path.abspath(__file__))
 
 def get_db_path():
+    """Retorna la ruta de la base de datos SQLite (solo para fallback)."""
     base_dir = get_base_dir()
     data_dir = os.path.join(base_dir, 'data')
     os.makedirs(data_dir, exist_ok=True)
     return os.path.join(data_dir, 'database.db')
 
 # ---------- CONFIGURACIÓN DE LA APLICACIÓN ----------
+# Obtener la ruta base (compilado o desarrollo)
+base_path = get_base_dir()
+
+# Configurar las rutas de plantillas y estáticos
+template_folder = os.path.join(base_path, 'templates')
+static_folder = os.path.join(base_path, 'static')
+
 app = Flask(
     __name__,
-    static_folder='static',
+    static_folder=static_folder,
     static_url_path='/static',
-    template_folder='templates'
+    template_folder=template_folder
 )
 
 # Configuración dinámicamente adaptada para Supabase (PostgreSQL) y SQLite
