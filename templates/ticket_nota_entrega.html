@@ -94,6 +94,22 @@
             font-size: 10px;
             color: #555;
         }
+        /* Bloque de depuración (solo visible en pantalla) */
+        .debug-info {
+            margin-top: 20px;
+            padding: 10px;
+            background: #fff3cd;
+            border: 1px solid #ffeeba;
+            border-radius: 4px;
+            font-size: 12px;
+            font-family: monospace;
+            color: #856404;
+            max-width: 80mm;
+            width: 100%;
+        }
+        .debug-info strong {
+            color: #533f03;
+        }
         .no-imprimir {
             margin-top: 20px;
             display: flex;
@@ -125,12 +141,10 @@
            ESTILOS PARA IMPRESIÓN (OPTIMIZADOS)
            ============================================ */
         @media print {
-            /* 🔥 Configuración de página para papel térmico */
             @page {
                 margin: 0;
                 size: 58mm auto;
             }
-            
             body {
                 background: white;
                 padding: 0;
@@ -142,17 +156,19 @@
                 border: none;
                 border-radius: 0;
                 box-shadow: none;
-                padding: 4px 2px;  /* 🔥 Padding reducido */
+                padding: 4px 2px;
                 margin: 0;
             }
             .ticket {
-                font-size: 9px;   /* 🔥 Fuente más pequeña para 58mm */
+                font-size: 9px;
                 line-height: 1.2;
             }
             .no-imprimir {
                 display: none !important;
             }
-            /* 🔥 Ajustes específicos para el contenido */
+            .debug-info {
+                display: none !important;
+            }
             .ticket .producto-linea {
                 font-size: 8px;
             }
@@ -174,7 +190,6 @@
             .ticket .footer-url {
                 font-size: 8px;
             }
-            /* Forzar colores en impresión */
             body, .ticket-container, .ticket {
                 background: white !important;
                 -webkit-print-color-adjust: exact;
@@ -202,18 +217,19 @@
             {% endif %}
             <div class="separator-doble"></div>
 
-            <!-- Número de ticket y fecha -->
+            <!-- Número de ticket y fecha (AHORA CON HORA LOCAL) -->
             <div class="center bold">NOTA DE ENTREGA N°: {{ "%05d" % venta.numero_ticket }}</div>
-            <div class="center">Fecha: {{ venta.fecha.strftime('%d/%m/%Y, %I:%M:%S %p') }}</div>
+            <div class="center">Fecha: {{ fecha_local.strftime('%d/%m/%Y, %I:%M:%S %p') }}</div>
             <div class="separator-doble"></div>
 
             <!-- Cliente -->
             <div><span class="bold">Cliente:</span> {{ cliente.nombre ~ ' ' ~ cliente.apellido if cliente else 'Consumidor Final' }}</div>
             <div><span class="bold">Cédula:</span> {{ cliente.cedula if cliente else '-' }}</div>
-            {% if config_ticket.mostrar_direccion_cliente and cliente and cliente.telefono %}
+            {% if cliente and cliente.telefono %}
                 <div><span class="bold">Teléfono:</span> {{ cliente.telefono }}</div>
             {% endif %}
-            {% if config_ticket.mostrar_direccion_cliente and cliente and cliente.direccion %}
+            <!-- 🔥 DIRECCIÓN FORZADA: se muestra SIEMPRE que el cliente tenga dirección, sin importar la configuración -->
+            {% if cliente and cliente.direccion %}
                 <div><span class="bold">Dirección:</span> {{ cliente.direccion }}</div>
             {% endif %}
             <div class="separator-simple"></div>
@@ -280,11 +296,11 @@
                 {% endif %}
                 <tr>
                     <td class="label">Método Cobro:</td>
-                    <td class="value">{{ metodo_mostrar }}</td>   <!-- 🔥 ENMASCARADO -->
+                    <td class="value">{{ metodo_mostrar }}</td>
                 </tr>
                 <tr>
                     <td class="label">Tasa aplicada:</td>
-                    <td class="value">{{ "%.2f"|format(tasa_mostrar or 0) }}</td>   <!-- 🔥 ENMASCARADO -->
+                    <td class="value">{{ "%.2f"|format(tasa_mostrar or 0) }}</td>
                 </tr>
                 <tr>
                     <td class="label">Método Pago:</td>
@@ -312,6 +328,15 @@
         </div>
     </div>
 
+    <!-- 🔥 BLOQUE DE DEPURACIÓN (solo visible en pantalla) -->
+    <div class="debug-info">
+        <strong>🔍 Depuración del ticket:</strong><br>
+        ¿Cliente existe? {{ 'Sí' if cliente else 'No' }}<br>
+        ¿Dirección del cliente? {{ cliente.direccion if cliente and cliente.direccion else '(vacía o nula)' }}<br>
+        Configuración mostrar_direccion_cliente: {{ config_ticket.mostrar_direccion_cliente }}<br>
+        (Esta información solo se muestra en pantalla, no en impresión)
+    </div>
+
     <!-- Botones de control (no se imprimen) -->
     <div class="no-imprimir">
         <button onclick="window.print()">🖨️ Imprimir</button>
@@ -319,9 +344,7 @@
     </div>
 
     <script>
-        // Auto-impresión al cargar la página
         window.onload = function() {
-            // Pequeño retardo para asegurar que todo el contenido esté renderizado
             setTimeout(function() {
                 window.print();
             }, 300);

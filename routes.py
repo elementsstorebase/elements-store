@@ -630,6 +630,29 @@ def _clasificar_pago(pago):
     return 'USD'
 
 # ============================================================
+# 🔥 NUEVA FUNCIÓN AUXILIAR: OBTENER CLIENTE GENÉRICO
+# ============================================================
+def _obtener_cliente_generico():
+    """
+    Busca o crea un cliente genérico para reasignar registros huérfanos.
+    """
+    generic = Cliente.query.filter_by(cedula='00000000').first()
+    if not generic:
+        generic = Cliente(
+            nombre='Eliminado',
+            apellido='Sistema',
+            cedula='00000000',
+            direccion='',
+            telefono='',
+            limite_credito=0,
+            saldo_deudor=0,
+            es_fijo=False
+        )
+        db.session.add(generic)
+        db.session.commit()
+    return generic
+
+# ============================================================
 # PÁGINAS PRINCIPALES (CON PROTECCIÓN)
 # ============================================================
 
@@ -786,6 +809,12 @@ def ticket_nota_entrega(venta_id):
     venta = Venta.query.get_or_404(venta_id)
     detalles = DetalleVenta.query.filter_by(venta_id=venta_id).all()
     cliente = venta.cliente
+
+    # 🔥 CORRECCIÓN: Convertir fecha a hora local de Venezuela
+    if venta.fecha.tzinfo:
+        fecha_local = venta.fecha.astimezone(pytz.timezone('America/Caracas'))
+    else:
+        fecha_local = pytz.timezone('America/Caracas').localize(venta.fecha)
     
     # 🔥 Obtener configuración del ticket para mostrar en la vista
     claves_ticket = [
@@ -829,6 +858,7 @@ def ticket_nota_entrega(venta_id):
                            venta=venta, 
                            detalles=detalles, 
                            cliente=cliente,
+                           fecha_local=fecha_local,               # 🔥 NUEVA VARIABLE
                            config_ticket=config_ticket,
                            metodo_mostrar=metodo_mostrar,
                            tasa_mostrar=tasa_mostrar)
@@ -1938,7 +1968,7 @@ def actualizar_cliente(id):
     return jsonify({'mensaje': 'Cliente actualizado'})
 
 # ============================================================
-# 🔥 CORRECCIÓN: ELIMINAR CLIENTE (CON VALIDACIÓN COMPLETA Y MANEJO DE ERRORES)
+# 🔥 CORRECCIÓN: ELIMINAR CLIENTE (CON VALIDACIÓN COMPLETA Y REASIGNACIÓN A GENÉRICO)
 # ============================================================
 @api_bp.route('/clientes/<int:id>', methods=['DELETE'])
 @login_required
@@ -1946,7 +1976,7 @@ def eliminar_cliente(id):
     cliente = Cliente.query.get_or_404(id)
     
     # ============================================================
-    # 🔥 VALIDACIÓN SOLO PARA APARTADOS ACTIVOS CON SALDO PENDIENTE
+    # 1. VALIDACIÓN: APARTADOS ACTIVOS CON SALDO PENDIENTE
     # ============================================================
     apartados_activos = Apartado.query.filter_by(cliente_id=id, estado='activo').all()
     apartados_con_saldo = [a for a in apartados_activos if a.saldo_restante > 0]
@@ -1961,7 +1991,30 @@ def eliminar_cliente(id):
         }), 400
     
     # ============================================================
-    # 🔥 ELIMINAR CLIENTE (incluso si tiene ventas o créditos históricos)
+    # 2. REASIGNAR TODOS LOS REGISTROS ASOCIADOS A UN CLIENTE GENÉRICO
+    # ============================================================
+    generic = _obtener_cliente_generico()
+    
+    # Reasignar apartados (todos, incluso reintegrados o pagados)
+    apartados = Apartado.query.filter_by(cliente_id=id).all()
+    for a in apartados:
+        a.cliente_id = generic.id
+    db.session.commit()
+    
+    # Reasignar ventas
+    ventas = Venta.query.filter_by(cliente_id=id).all()
+    for v in ventas:
+        v.cliente_id = generic.id
+    db.session.commit()
+    
+    # Reasignar créditos
+    creditos = Credito.query.filter_by(cliente_id=id).all()
+    for c in creditos:
+        c.cliente_id = generic.id
+    db.session.commit()
+    
+    # ============================================================
+    # 3. ELIMINAR CLIENTE
     # ============================================================
     try:
         db.session.delete(cliente)
