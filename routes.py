@@ -6,7 +6,7 @@ from PIL import Image, ImageDraw, ImageFont
 from werkzeug.security import check_password_hash, generate_password_hash
 import json
 import os
-import sys
+import sys  # 🔥 CAMBIO: importar sys para verificar plataforma
 import io
 from functools import wraps
 from sqlalchemy.exc import OperationalError
@@ -50,6 +50,10 @@ def imprimir_ticket(texto, printer_name, copias=1, cortar=True):
     - cortar: si debe enviar comando de corte al final
     Retorna True si se imprimió correctamente, False en caso contrario.
     """
+    # 🔥 CAMBIO: Importar win32print solo en Windows y manejar excepción
+    if sys.platform != 'win32':
+        print("⚠️ Impresión solo disponible en Windows. Se omite.")
+        return False
     try:
         import win32print
         hprinter = win32print.OpenPrinter(printer_name)
@@ -768,6 +772,53 @@ def admin_cajas():
 @login_required
 def config_impresora():
     return render_template('impresora_config.html')
+
+# ============================================================
+# 🔥 NUEVA RUTA PARA TICKET HTML (IMPRESIÓN DESDE NAVEGADOR)
+# ============================================================
+
+@main_bp.route('/ventas/ticket/<int:venta_id>')
+@login_required
+def ticket_nota_entrega(venta_id):
+    """
+    Renderiza una vista HTML del ticket para impresión desde el navegador.
+    """
+    venta = Venta.query.get_or_404(venta_id)
+    detalles = DetalleVenta.query.filter_by(venta_id=venta_id).all()
+    cliente = venta.cliente
+    
+    # 🔥 Obtener configuración del ticket para mostrar en la vista
+    claves_ticket = [
+        'ticket_tienda_nombre', 'ticket_rif', 'ticket_telefono_tienda', 'ticket_direccion_tienda',
+        'ticket_mostrar_rif', 'ticket_mostrar_telefono', 'ticket_mostrar_direccion_cliente',
+        'ticket_mostrar_direccion_tienda', 'ticket_mensaje', 'ticket_url',
+        'ticket_subtotal_usd', 'ticket_iva_porcentaje'
+    ]
+    configs_ticket = {}
+    for clave in claves_ticket:
+        cfg = Configuracion.query.filter_by(clave=clave).first()
+        configs_ticket[clave] = cfg.valor if cfg else None
+
+    config_ticket = {
+        'nombre_tienda': configs_ticket.get('ticket_tienda_nombre', 'ELEMENTS STORE'),
+        'rif': configs_ticket.get('ticket_rif', ''),
+        'telefono_tienda': configs_ticket.get('ticket_telefono_tienda', ''),
+        'direccion_tienda': configs_ticket.get('ticket_direccion_tienda', ''),
+        'mostrar_rif': configs_ticket.get('ticket_mostrar_rif', 'true').lower() == 'true',
+        'mostrar_telefono': configs_ticket.get('ticket_mostrar_telefono', 'true').lower() == 'true',
+        'mostrar_direccion_tienda': configs_ticket.get('ticket_mostrar_direccion_tienda', 'true').lower() == 'true',
+        'mostrar_direccion_cliente': configs_ticket.get('ticket_mostrar_direccion_cliente', 'true').lower() == 'true',
+        'mostrar_subtotal_usd': configs_ticket.get('ticket_subtotal_usd', 'false').lower() == 'true',
+        'porcentaje_iva': float(configs_ticket.get('ticket_iva_porcentaje', '0') or '0'),
+        'mensaje_agradecimiento': configs_ticket.get('ticket_mensaje', '¡Gracias por su compra!'),
+        'url_web': configs_ticket.get('ticket_url', 'www.elementsstore.com')
+    }
+    
+    return render_template('ticket_nota_entrega.html', 
+                           venta=venta, 
+                           detalles=detalles, 
+                           cliente=cliente,
+                           config_ticket=config_ticket)
 
 # ============================================================
 # AUTENTICACIÓN: LOGIN Y LOGOUT (SIN REGISTRO PÚBLICO)

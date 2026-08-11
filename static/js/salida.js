@@ -837,6 +837,19 @@ document.addEventListener('DOMContentLoaded', function() {
         };
     }
 
+    // ============================================================
+    // 🔥 NUEVA FUNCIÓN PARA ABRIR EL TICKET HTML (window.print)
+    // ============================================================
+    function imprimirNotaEntrega(ventaId) {
+        if (!ventaId) {
+            console.warn('No se proporcionó ventaId para imprimir nota de entrega');
+            return;
+        }
+        const url = `/ventas/ticket/${ventaId}`;
+        // Abrir en una nueva ventana/pestaña (se puede ajustar el tamaño)
+        window.open(url, '_blank', 'width=500,height=700,scrollbars=yes');
+    }
+
     // ---------- PROCESAR VENTA (FUNCIÓN REUTILIZABLE) ----------
     function procesarVenta(clienteId, clienteData) {
         const items = carrito.map(item => ({
@@ -938,6 +951,8 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .then(res => {
                 alert(res.mensaje || '✅ Venta registrada exitosamente');
+                // 🔥 CAMBIO: Abrir ticket HTML después de la venta
+                imprimirNotaEntrega(res.venta_id);
                 limpiarVenta();
             })
             .catch(err => {
@@ -1045,7 +1060,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     numeroTicket = String(res.numero_ticket).padStart(5, '0');
                 }
                 btnGenerarTicket.textContent = 'Descargando ticket...';
+                // Descargar PNG
                 window.location.href = `/api/generar-ticket/${ventaId}`;
+                // 🔥 CAMBIO: Abrir ticket HTML también (opcional, pero útil)
+                imprimirNotaEntrega(ventaId);
                 setTimeout(() => {
                     limpiarVenta();
                     btnGenerarTicket.textContent = 'Generar Ticket (PNG)';
@@ -1174,6 +1192,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     numeroTicket = String(res.numero_ticket).padStart(5, '0');
                 }
                 alert('✅ Venta registrada. El ticket físico se ha enviado a la impresora.');
+                // 🔥 CAMBIO: Abrir ticket HTML (el backend ya imprimió, pero mostramos la vista)
+                imprimirNotaEntrega(res.venta_id);
                 limpiarVenta();
                 btnGenerarTicketFisico.textContent = 'Generar Ticket Físico';
                 btnGenerarTicketFisico.disabled = false;
@@ -1272,6 +1292,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     numeroTicket = String(res.numero_ticket).padStart(5, '0');
                 }
                 alert('✅ Venta registrada (sin impresión física porque no hay impresora configurada).');
+                // 🔥 CAMBIO: Abrir ticket HTML igualmente
+                imprimirNotaEntrega(res.venta_id);
                 limpiarVenta();
                 btnGenerarTicketFisico.textContent = 'Generar Ticket Físico';
                 btnGenerarTicketFisico.disabled = false;
