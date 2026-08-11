@@ -810,11 +810,13 @@ def ticket_nota_entrega(venta_id):
     detalles = DetalleVenta.query.filter_by(venta_id=venta_id).all()
     cliente = venta.cliente
 
-    # 🔥 CORRECCIÓN: Convertir fecha a hora local de Venezuela
-    if venta.fecha.tzinfo:
-        fecha_local = venta.fecha.astimezone(pytz.timezone('America/Caracas'))
+    # 🔥 CORRECCIÓN DE ZONA HORARIA (CARACAS -4) - FORZANDO UTC
+    if venta.fecha.tzinfo is None:
+        # Asumir que la fecha en la BD está en UTC
+        fecha_utc = pytz.UTC.localize(venta.fecha)
+        fecha_local = fecha_utc.astimezone(pytz.timezone('America/Caracas'))
     else:
-        fecha_local = pytz.timezone('America/Caracas').localize(venta.fecha)
+        fecha_local = venta.fecha.astimezone(pytz.timezone('America/Caracas'))
     
     # 🔥 Obtener configuración del ticket para mostrar en la vista
     claves_ticket = [
@@ -2488,11 +2490,12 @@ def listar_ventas():
     result = []
     for v in ventas:
         cliente = v.cliente
-        # 🔥 CORRECCIÓN: Convertir fecha a hora local de Venezuela
-        if v.fecha.tzinfo:
-            fecha_local = v.fecha.astimezone(pytz.timezone('America/Caracas'))
+        # 🔥 CORRECCIÓN: Convertir fecha a hora local de Venezuela (forzando UTC)
+        if v.fecha.tzinfo is None:
+            fecha_utc = pytz.UTC.localize(v.fecha)
+            fecha_local = fecha_utc.astimezone(pytz.timezone('America/Caracas'))
         else:
-            fecha_local = pytz.timezone('America/Caracas').localize(v.fecha)
+            fecha_local = v.fecha.astimezone(pytz.timezone('America/Caracas'))
         result.append({
             'id': v.id,
             'numero_ticket': v.numero_ticket,
@@ -2535,11 +2538,12 @@ def detalle_venta(venta_id):
             'subtotal_ves': detalle.precio_unitario_ves * detalle.cantidad
         })
 
-    # 🔥 CORRECCIÓN: Convertir fecha a hora local de Venezuela
-    if venta.fecha.tzinfo:
-        fecha_local = venta.fecha.astimezone(pytz.timezone('America/Caracas'))
+    # 🔥 CORRECCIÓN: Convertir fecha a hora local de Venezuela (forzando UTC)
+    if venta.fecha.tzinfo is None:
+        fecha_utc = pytz.UTC.localize(venta.fecha)
+        fecha_local = fecha_utc.astimezone(pytz.timezone('America/Caracas'))
     else:
-        fecha_local = pytz.timezone('America/Caracas').localize(venta.fecha)
+        fecha_local = venta.fecha.astimezone(pytz.timezone('America/Caracas'))
 
     return jsonify({
         'id': venta.id,
@@ -2752,11 +2756,12 @@ def generar_ticket_imagen(venta_id):
     }
     metodo_cobro_legible = metodo_cobro_map.get(venta.metodo_cobro, venta.metodo_cobro)
     
-    # 🔥 CORRECCIÓN: Obtener fecha local
-    if venta.fecha.tzinfo:
-        fecha_local = venta.fecha.astimezone(pytz.timezone('America/Caracas'))
+    # 🔥 CORRECCIÓN: Obtener fecha local (forzando UTC)
+    if venta.fecha.tzinfo is None:
+        fecha_utc = pytz.UTC.localize(venta.fecha)
+        fecha_local = fecha_utc.astimezone(pytz.timezone('America/Caracas'))
     else:
-        fecha_local = pytz.timezone('America/Caracas').localize(venta.fecha)
+        fecha_local = venta.fecha.astimezone(pytz.timezone('America/Caracas'))
     fecha_formateada = fecha_local.strftime('%d/%m/%Y, %I:%M:%S %p')
     fecha_formateada = fecha_formateada.replace('AM', 'a. m.').replace('PM', 'p. m.')
     
