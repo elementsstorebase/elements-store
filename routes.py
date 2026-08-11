@@ -2080,6 +2080,7 @@ def reactivar_cliente(id):
 # ============================================================
 # API: VENTAS (PROTEGIDA) - CORREGIDO: TOTAL VES = SUBTOTAL + IVA
 # 🔥 MODIFICADO: uso de obtener_proximo_numero_ticket()
+# 🔥 MODIFICADO: lógica mejorada para asignar cliente basado en datos del formulario
 # ============================================================
 
 @api_bp.route('/ventas', methods=['POST'])
@@ -2095,6 +2096,73 @@ def registrar_venta():
 
     if not items:
         return jsonify({'error': 'El carrito está vacío'}), 400
+
+    # ============================================================
+    # 🔥 NUEVA LÓGICA: Usar los datos del formulario para obtener/crear el cliente
+    # ============================================================
+    cliente_nombre_form = data.get('cliente_nombre', '').strip()
+    cliente_apellido_form = data.get('cliente_apellido', '').strip()
+    cliente_cedula_form = data.get('cliente_cedula', '').strip()
+    cliente_telefono_form = data.get('cliente_telefono', '').strip()
+    cliente_direccion_form = data.get('cliente_direccion', '').strip()
+
+    # Si se enviaron nombre y cédula, buscar o crear cliente por cédula
+    if cliente_nombre_form and cliente_cedula_form:
+        # Buscar cliente existente por cédula
+        cliente = Cliente.query.filter_by(cedula=cliente_cedula_form).first()
+        if cliente:
+            # Actualizar datos del cliente con la información del formulario
+            if cliente.nombre != cliente_nombre_form or cliente.apellido != cliente_apellido_form:
+                cliente.nombre = cliente_nombre_form
+                cliente.apellido = cliente_apellido_form
+            if cliente_telefono_form and cliente.telefono != cliente_telefono_form:
+                cliente.telefono = cliente_telefono_form
+            if cliente_direccion_form and cliente.direccion != cliente_direccion_form:
+                cliente.direccion = cliente_direccion_form
+            db.session.commit()
+        else:
+            # Crear cliente genérico (no fijo) con los datos del formulario
+            cliente = Cliente(
+                nombre=cliente_nombre_form,
+                apellido=cliente_apellido_form or '',
+                cedula=cliente_cedula_form,
+                direccion=cliente_direccion_form,
+                telefono=cliente_telefono_form,
+                limite_credito=0,
+                saldo_deudor=0,
+                es_fijo=False,
+                activo=True
+            )
+            db.session.add(cliente)
+            db.session.commit()
+        # Sobrescribir cliente_id con el ID encontrado/creado
+        cliente_id = cliente.id
+    else:
+        # Si no se enviaron datos del cliente, usar el cliente_id recibido (puede ser None)
+        # Si cliente_id es None, se asigna un cliente genérico o se deja NULL
+        if cliente_id is None:
+            # Intentar obtener cliente genérico o crear uno
+            cliente = Cliente.query.filter_by(cedula='00000000').first()
+            if not cliente:
+                cliente = Cliente(
+                    nombre='Consumidor',
+                    apellido='Final',
+                    cedula='00000000',
+                    direccion='',
+                    telefono='',
+                    limite_credito=0,
+                    saldo_deudor=0,
+                    es_fijo=False,
+                    activo=True
+                )
+                db.session.add(cliente)
+                db.session.commit()
+            cliente_id = cliente.id
+        else:
+            # Verificar que el cliente existe
+            cliente = Cliente.query.get(cliente_id)
+            if not cliente:
+                return jsonify({'error': 'Cliente no encontrado'}), 404
 
     # 🔥 NUEVO: Obtener el próximo número de ticket disponible
     nuevo_ticket = obtener_proximo_numero_ticket()
@@ -2315,6 +2383,7 @@ def registrar_venta():
         # ============================================================
         # 🔥 OBTENER DATOS DEL CLIENTE DESDE EL JSON (prioridad) O DE LA BD
         # ============================================================
+        # Usamos el cliente que ya tenemos (que es el correcto después de la nueva lógica)
         cliente = venta.cliente
         cliente_nombre = data.get('cliente_nombre', '').strip()
         cliente_cedula = data.get('cliente_cedula', '').strip()
@@ -4292,6 +4361,7 @@ def finalizar_apartado(id):
         # 🔥 OBTENER DATOS DEL CLIENTE DESDE EL JSON (prioridad) O DE LA BD
         # ============================================================
         cliente = venta.cliente
+        # Para apartados, los datos del cliente ya están en la BD; pero por si acaso:
         cliente_nombre = data.get('cliente_nombre', '').strip()
         cliente_cedula = data.get('cliente_cedula', '').strip()
         cliente_telefono = data.get('cliente_telefono', '').strip()
