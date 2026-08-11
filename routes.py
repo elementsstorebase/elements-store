@@ -1860,17 +1860,32 @@ def eliminar_producto(id):
     return jsonify({'mensaje': 'Producto eliminado'})
 
 # ============================================================
-# API: CLIENTES (PROTEGIDA) - MODIFICADO PARA FILTRAR ACTIVOS Y FIJOS
+# API: CLIENTES (PROTEGIDA) - MODIFICADO PARA FILTRAR ACTIVOS E INACTIVOS
 # ============================================================
 
 @api_bp.route('/clientes', methods=['GET'])
 @login_required
 def get_clientes():
+    """
+    Lista clientes según el estado 'activo'.
+    - Si se pasa 'activo=true' o no se pasa el parámetro, devuelve solo activos.
+    - Si se pasa 'activo=false', devuelve solo inactivos.
+    """
     es_fijo = request.args.get('es_fijo')
-    # 🔥 FILTRO: solo clientes activos
-    query = Cliente.query.filter_by(activo=True)
+    activo_param = request.args.get('activo', 'true').lower()
+    
+    # Determinar filtro de activo
+    if activo_param == 'true':
+        query = Cliente.query.filter_by(activo=True)
+    elif activo_param == 'false':
+        query = Cliente.query.filter_by(activo=False)
+    else:
+        # Por defecto, mostrar activos
+        query = Cliente.query.filter_by(activo=True)
+    
     if es_fijo is not None:
         query = query.filter_by(es_fijo=es_fijo.lower() == 'true')
+    
     clientes = query.all()
     return jsonify([{
         'id': c.id,
@@ -1882,7 +1897,7 @@ def get_clientes():
         'limite_credito': c.limite_credito,
         'saldo_deudor': c.saldo_deudor,
         'es_fijo': c.es_fijo,
-        'activo': c.activo  # 🔥 Incluimos el campo para el frontend (opcional)
+        'activo': c.activo
     } for c in clientes])
 
 # ============================================================
@@ -2014,6 +2029,53 @@ def eliminar_cliente(id):
         import traceback
         traceback.print_exc()
         return jsonify({'error': f'Error al desactivar el cliente: {str(e)}'}), 500
+
+# ============================================================
+# 🔥 NUEVO ENDPOINT: DESACTIVAR CLIENTE (PUT explícito)
+# ============================================================
+@api_bp.route('/clientes/<int:id>/desactivar', methods=['PUT'])
+@login_required
+def desactivar_cliente(id):
+    """Desactiva un cliente (activo=False) si no tiene apartados con saldo pendiente."""
+    cliente = Cliente.query.get_or_404(id)
+    
+    # Validar que no tenga apartados activos con saldo
+    apartados_activos = Apartado.query.filter_by(cliente_id=id, estado='activo').all()
+    apartados_con_saldo = [a for a in apartados_activos if a.saldo_restante > 0]
+    if apartados_con_saldo:
+        detalles = [f"#{a.id} (${a.saldo_restante:.2f} pendiente)" for a in apartados_con_saldo]
+        return jsonify({
+            'error': f'No se puede desactivar el cliente porque tiene apartados activos con saldo pendiente: {", ".join(detalles)}.'
+        }), 400
+
+    # Desactivar
+    cliente.activo = False
+    db.session.commit()
+    
+    log = Log(accion='CLIENTE_DESACTIVADO', 
+              detalle=f'Cliente {cliente.nombre} {cliente.apellido} (ID {cliente.id}) desactivado vía /desactivar.')
+    db.session.add(log)
+    db.session.commit()
+    
+    return jsonify({'mensaje': 'Cliente desactivado correctamente.'}), 200
+
+# ============================================================
+# 🔥 NUEVO ENDPOINT: REACTIVAR CLIENTE (PUT)
+# ============================================================
+@api_bp.route('/clientes/<int:id>/reactivar', methods=['PUT'])
+@login_required
+def reactivar_cliente(id):
+    """Reactivar un cliente (activo=True). No tiene restricciones adicionales."""
+    cliente = Cliente.query.get_or_404(id)
+    cliente.activo = True
+    db.session.commit()
+    
+    log = Log(accion='CLIENTE_REACTIVADO', 
+              detalle=f'Cliente {cliente.nombre} {cliente.apellido} (ID {cliente.id}) reactivado.')
+    db.session.add(log)
+    db.session.commit()
+    
+    return jsonify({'mensaje': 'Cliente reactivado correctamente.'}), 200
 
 # ============================================================
 # API: VENTAS (PROTEGIDA) - CORREGIDO: TOTAL VES = SUBTOTAL + IVA
@@ -2319,7 +2381,7 @@ def registrar_venta():
     }), 201
 
 # ============================================================
-# API: LISTAR VENTAS (PROTEGIDA) - 🔥 CORRECCIÓN ZONA HORARIA Y COMPLETADA
+# API: LISTAR VENTAS (PROTEGIDA) - 🔥 CORRECCIÓN ZONA HORARIA
 # ============================================================
 
 @api_bp.route('/ventas', methods=['GET'])
@@ -4230,13 +4292,19 @@ def finalizar_apartado(id):
         # 🔥 OBTENER DATOS DEL CLIENTE DESDE EL JSON (prioridad) O DE LA BD
         # ============================================================
         cliente = venta.cliente
-        # Nota: Aquí 'data' no existe en este contexto, pero no la necesitamos realmente,
-        # porque estamos en un endpoint POST que no recibe data del cliente en el cuerpo.
-        # Usamos los datos de la BD.
-        cliente_nombre = f"{cliente.nombre} {cliente.apellido}" if cliente else "Consumidor Final"
-        cliente_cedula = cliente.cedula if cliente else ""
-        cliente_telefono = cliente.telefono if cliente else ""
-        cliente_direccion = cliente.direccion if cliente else ""
+        cliente_nombre = data.get('cliente_nombre', '').strip()
+        cliente_cedula = data.get('cliente_cedula', '').strip()
+        cliente_telefono = data.get('cliente_telefono', '').strip()
+        cliente_direccion = data.get('cliente_direccion', '').strip()
+
+        if not cliente_nombre:
+            cliente_nombre = f"{cliente.nombre} {cliente.apellido}" if cliente else "Consumidor Final"
+        if not cliente_cedula:
+            cliente_cedula = cliente.cedula if cliente else ""
+        if not cliente_telefono:
+            cliente_telefono = cliente.telefono if cliente else ""
+        if not cliente_direccion:
+            cliente_direccion = cliente.direccion if cliente else ""
 
         detalles = DetalleVenta.query.filter_by(venta_id=venta.id).all()
         fecha_12h = venta.fecha.strftime('%d/%m/%Y %I:%M %p')

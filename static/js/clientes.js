@@ -4,11 +4,17 @@ document.addEventListener('DOMContentLoaded', function() {
     const filtroBuscar = document.getElementById('filtro-buscar');
     const btnFiltrar = document.getElementById('btn-filtrar');
     const btnLimpiar = document.getElementById('btn-limpiar');
-    const modalEliminar = document.getElementById('modal-eliminar');
-    const eliminarClienteId = document.getElementById('eliminar-cliente-id');
-    const eliminarClienteNombre = document.getElementById('eliminar-cliente-nombre');
+    const modalAccion = document.getElementById('modal-accion');
+    const modalTitulo = document.getElementById('modal-titulo');
+    const modalMensaje = document.getElementById('modal-mensaje');
+    const modalBtnConfirmar = document.getElementById('modal-btn-confirmar');
+    const modalIcono = document.getElementById('modal-icono');
+    const clienteIdAccion = document.getElementById('cliente-id-accion');
+    const tipoAccion = document.getElementById('tipo-accion');
+    const clienteNombreAccion = document.getElementById('cliente-nombre-accion');
 
     let clientesCache = [];
+    let estadoActual = 'activos'; // 'activos' o 'inactivos'
 
     // ---------- FUNCIÓN DE FORMATEO ----------
     function formatearMonto(monto) {
@@ -21,10 +27,28 @@ document.addEventListener('DOMContentLoaded', function() {
         return `${enterosFormateados},${decimales}`;
     }
 
+    // ---------- CAMBIAR PESTAÑA ----------
+    window.cambiarPestana = function(tab) {
+        estadoActual = tab;
+        // Actualizar estilo de pestañas
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.classList.remove('border-indigo-500', 'text-indigo-600');
+            btn.classList.add('border-transparent', 'text-gray-500');
+        });
+        const tabActiva = document.getElementById(`tab-${tab}`);
+        if (tabActiva) {
+            tabActiva.classList.remove('border-transparent', 'text-gray-500');
+            tabActiva.classList.add('border-indigo-500', 'text-indigo-600');
+        }
+        cargarClientes();
+    };
+
     // ---------- CARGAR CLIENTES ----------
     function cargarClientes(filtro = '') {
         const params = new URLSearchParams();
         params.append('es_fijo', 'true');
+        // 🔥 NUEVO: pasar el estado actual
+        params.append('activo', estadoActual === 'activos' ? 'true' : 'false');
         if (filtro) {
             params.append('buscar', filtro);
         }
@@ -48,13 +72,36 @@ document.addEventListener('DOMContentLoaded', function() {
     function renderizarClientes(clientes) {
         tablaClientes.innerHTML = '';
         if (clientes.length === 0) {
-            tablaClientes.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-gray-400">No hay clientes registrados</td></tr>`;
+            tablaClientes.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-gray-400">No hay clientes ${estadoActual === 'activos' ? 'activos' : 'inactivos'}</td></tr>`;
             return;
         }
 
         clientes.forEach(c => {
             const tr = document.createElement('tr');
             tr.className = 'border-b border-gray-100 hover:bg-gray-50 transition-colors';
+            
+            let acciones = '';
+            if (estadoActual === 'activos') {
+                // Botón Desactivar
+                acciones = `
+                    <a href="/admin/clientes/editar/${c.id}" class="text-indigo-600 hover:text-indigo-800 mr-2" title="Editar">
+                        <i class="fas fa-edit"></i>
+                    </a>
+                    <button onclick="abrirModalAccion(${c.id}, '${c.nombre} ${c.apellido}', 'desactivar')" 
+                            class="text-red-500 hover:text-red-700" title="Desactivar">
+                        <i class="fas fa-user-slash"></i>
+                    </button>
+                `;
+            } else {
+                // Botón Reactivar
+                acciones = `
+                    <button onclick="abrirModalAccion(${c.id}, '${c.nombre} ${c.apellido}', 'reactivar')" 
+                            class="text-green-500 hover:text-green-700" title="Reactivar">
+                        <i class="fas fa-user-check"></i> Reactivar
+                    </button>
+                `;
+            }
+
             tr.innerHTML = `
                 <td class="py-2 px-3 font-medium">${c.nombre || ''}</td>
                 <td class="py-2 px-3">${c.apellido || ''}</td>
@@ -62,18 +109,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 <td class="py-2 px-3">${c.telefono || '-'}</td>
                 <td class="py-2 px-3">${c.direccion || '-'}</td>
                 <td class="py-2 px-3 text-center">
-                    <span class="px-2 py-1 rounded-full text-xs ${c.deudas_activas > 0 ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}">
+                    <span class="px-2 py-1 rounded-full text-xs ${(c.deudas_activas || 0) > 0 ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}">
                         ${c.deudas_activas || 0}
                     </span>
                 </td>
-                <td class="py-2 px-3 text-right">
-                    <a href="/admin/clientes/editar/${c.id}" class="text-indigo-600 hover:text-indigo-800 mr-2" title="Editar">
-                        <i class="fas fa-edit"></i>
-                    </a>
-                    <button onclick="abrirModalEliminar(${c.id}, '${c.nombre} ${c.apellido}')" class="text-red-500 hover:text-red-700" title="Eliminar">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </td>
+                <td class="py-2 px-3 text-right">${acciones}</td>
             `;
             tablaClientes.appendChild(tr);
         });
@@ -102,44 +142,65 @@ document.addEventListener('DOMContentLoaded', function() {
         renderizarClientes(clientesCache);
     }
 
-    // ---------- MODAL ELIMINAR ----------
-    window.abrirModalEliminar = function(id, nombre) {
-        eliminarClienteId.value = id;
-        eliminarClienteNombre.textContent = nombre || 'sin nombre';
-        modalEliminar.classList.remove('hidden');
+    // ---------- MODAL ACCIÓN (Desactivar/Reactivar) ----------
+    window.abrirModalAccion = function(id, nombre, tipo) {
+        clienteIdAccion.value = id;
+        clienteNombreAccion.value = nombre;
+        tipoAccion.value = tipo;
+
+        if (tipo === 'desactivar') {
+            modalTitulo.textContent = 'Confirmar Desactivación';
+            modalMensaje.textContent = `¿Estás seguro de desactivar al cliente "${nombre}"? Podrás reactivarlo después.`;
+            modalBtnConfirmar.className = 'btn-primary bg-red-600 hover:bg-red-700 flex-1';
+            modalIcono.className = 'fas fa-user-slash mr-1';
+            modalBtnConfirmar.innerHTML = '<i class="fas fa-user-slash mr-1"></i> Desactivar';
+        } else {
+            modalTitulo.textContent = 'Confirmar Reactivación';
+            modalMensaje.textContent = `¿Estás seguro de reactivar al cliente "${nombre}"? Volverá a estar disponible.`;
+            modalBtnConfirmar.className = 'btn-primary bg-green-600 hover:bg-green-700 flex-1';
+            modalIcono.className = 'fas fa-user-check mr-1';
+            modalBtnConfirmar.innerHTML = '<i class="fas fa-user-check mr-1"></i> Reactivar';
+        }
+
+        modalAccion.classList.remove('hidden');
     };
 
-    window.cerrarModalEliminar = function() {
-        modalEliminar.classList.add('hidden');
-        eliminarClienteId.value = '';
+    window.cerrarModalAccion = function() {
+        modalAccion.classList.add('hidden');
+        clienteIdAccion.value = '';
+        tipoAccion.value = '';
+        clienteNombreAccion.value = '';
     };
 
-    window.confirmarEliminar = function() {
-        const id = eliminarClienteId.value;
+    window.confirmarAccion = function() {
+        const id = clienteIdAccion.value;
+        const tipo = tipoAccion.value;
         if (!id) return;
 
-        fetch(`/api/clientes/${id}`, {
-            method: 'DELETE',
+        // 🔥 USAR LOS ENDPOINTS ESPECÍFICOS: /desactivar o /reactivar
+        const url = `/api/clientes/${id}/${tipo}`;
+        const method = 'PUT';
+
+        fetch(url, {
+            method: method,
             headers: { 'Content-Type': 'application/json' }
         })
         .then(r => {
             if (!r.ok) {
-                // Intentar obtener el mensaje de error del servidor
                 return r.json().then(errData => {
-                    throw new Error(errData.error || 'Error al eliminar cliente');
+                    throw new Error(errData.error || 'Error al procesar la acción');
                 });
             }
             return r.json();
         })
         .then(res => {
-            alert(res.mensaje || 'Cliente eliminado correctamente');
-            cerrarModalEliminar();
-            cargarClientes();
+            alert(res.mensaje || `✅ Cliente ${tipo === 'desactivar' ? 'desactivado' : 'reactivado'} correctamente`);
+            cerrarModalAccion();
+            cargarClientes(); // Recargar la lista actual
         })
         .catch(err => {
             alert('❌ Error: ' + err.message);
-            // No cerramos el modal para que el usuario pueda ver el error y reintentar o cancelar
-            // Si el error es por apartados activos, el modal sigue abierto y el usuario puede decidir.
+            // El modal queda abierto para que el usuario vea el error y pueda cancelar o reintentar
         });
     };
 
@@ -239,17 +300,25 @@ document.addEventListener('DOMContentLoaded', function() {
     // Cerrar modal con Escape
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
-            cerrarModalEliminar();
+            cerrarModalAccion();
         }
     });
 
     // Cerrar modal al hacer clic fuera
-    modalEliminar.addEventListener('click', function(e) {
+    modalAccion.addEventListener('click', function(e) {
         if (e.target === this) {
-            cerrarModalEliminar();
+            cerrarModalAccion();
         }
     });
 
     // ---------- INICIALIZACIÓN ----------
+    // Por defecto, cargar activos
+    estadoActual = 'activos';
+    // Asegurar que la pestaña activa esté resaltada
+    const tabActiva = document.getElementById('tab-activos');
+    if (tabActiva) {
+        tabActiva.classList.remove('border-transparent', 'text-gray-500');
+        tabActiva.classList.add('border-indigo-500', 'text-indigo-600');
+    }
     cargarClientes();
 });

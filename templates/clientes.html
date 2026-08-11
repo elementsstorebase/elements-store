@@ -13,6 +13,22 @@
         </a>
     </div>
 
+    <!-- Pestañas: Activos / Inactivos -->
+    <div class="border-b border-gray-200">
+        <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+            <button id="tab-activos" 
+                    class="tab-btn border-indigo-500 text-indigo-600 whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm"
+                    onclick="cambiarPestana('activos')">
+                <i class="fas fa-user-check mr-1"></i> Activos
+            </button>
+            <button id="tab-inactivos" 
+                    class="tab-btn border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm"
+                    onclick="cambiarPestana('inactivos')">
+                <i class="fas fa-user-slash mr-1"></i> Inactivos
+            </button>
+        </nav>
+    </div>
+
     <!-- Filtros y búsqueda -->
     <div class="card">
         <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -48,26 +64,25 @@
     </div>
 </div>
 
-<!-- Modal Eliminar Cliente -->
-<div id="modal-eliminar" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+<!-- Modal de Acción (Desactivar / Reactivar) -->
+<div id="modal-accion" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
     <div class="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
         <div class="flex justify-between items-center mb-4">
-            <h3 class="text-lg font-semibold text-gray-800">Confirmar Eliminación</h3>
-            <button onclick="cerrarModalEliminar()" class="text-gray-400 hover:text-gray-600">
+            <h3 id="modal-titulo" class="text-lg font-semibold text-gray-800">Confirmar Acción</h3>
+            <button onclick="cerrarModalAccion()" class="text-gray-400 hover:text-gray-600">
                 <i class="fas fa-times"></i>
             </button>
         </div>
-        <p class="text-gray-600 mb-4">
-            ¿Estás seguro de eliminar al cliente <span id="eliminar-cliente-nombre" class="font-semibold"></span>?
-            Esta acción no se puede deshacer.
-        </p>
+        <p id="modal-mensaje" class="text-gray-600 mb-4">¿Estás seguro de realizar esta acción?</p>
         <div class="flex space-x-3">
-            <button onclick="confirmarEliminar()" class="btn-primary bg-red-600 hover:bg-red-700 flex-1">
-                <i class="fas fa-trash mr-1"></i> Eliminar
+            <button id="modal-btn-confirmar" onclick="confirmarAccion()" class="btn-primary flex-1">
+                <i id="modal-icono" class="fas fa-check mr-1"></i> Confirmar
             </button>
-            <button onclick="cerrarModalEliminar()" class="btn-secondary flex-1">Cancelar</button>
+            <button onclick="cerrarModalAccion()" class="btn-secondary flex-1">Cancelar</button>
         </div>
-        <input type="hidden" id="eliminar-cliente-id">
+        <input type="hidden" id="cliente-id-accion">
+        <input type="hidden" id="tipo-accion">
+        <input type="hidden" id="cliente-nombre-accion">
     </div>
 </div>
 
