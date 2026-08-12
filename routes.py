@@ -919,6 +919,12 @@ def ticket_nota_entrega(venta_id):
         metodo_mostrar = metodo_cobro
         tasa_mostrar = venta.tasa_aplicada
     
+    # ============================================================
+    # 🔥 FORZAR VALORES NUMÉRICOS PARA EVITAR None EN LA PLANTILLA
+    # ============================================================
+    venta.subtotal_ves = venta.subtotal_ves or 0.0
+    venta.total_ves = venta.total_ves or 0.0
+    
     return render_template('ticket_nota_entrega.html', 
                            venta=venta, 
                            detalles=detalles, 

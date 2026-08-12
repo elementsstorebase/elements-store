@@ -620,7 +620,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // ---------- TICKET VIRTUAL ----------
+    // ---------- TICKET VIRTUAL (MODIFICADO PARA MOSTRAR IVA EN VES) ----------
     function actualizarTicket() {
         controlarVisibilidadSubtotal();
 
@@ -654,6 +654,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 } else if (ticketTasa) {
                     ticketTasa.style.display = 'inline';
                 }
+                
+                // Ocultar fila del IVA si carrito vacío
+                const ivaElement = document.getElementById('ticket-iva-ves');
+                if (ivaElement) ivaElement.style.display = 'none';
                 return;
             }
 
@@ -785,10 +789,53 @@ document.addEventListener('DOMContentLoaded', function() {
             } else {
                 if (ticketTotal) ticketTotal.textContent = `Bs ${formatearMonto(totalMostrar)}`;
             }
+
+            // ============================================================
+            // 🔥 NUEVO: INSERTAR LÍNEA DEL IVA EN VES (si corresponde)
+            // ============================================================
+            const ivaPorcentaje = configTicket.ivaPorcentaje || 0;
+            // Solo mostrar IVA en VES si el método de cobro es en VES y el porcentaje > 0
+            const esMetodoVes = tasaSeleccionada !== 'usd' && tasaSeleccionada !== 'usd_personalizado';
+            
+            // Buscar el contenedor de totales VES (donde están subtotal y total)
+            const totalContainer = document.querySelector('.border-b-2.border-black.pb-2.mb-2');
+            if (totalContainer) {
+                let ivaElement = document.getElementById('ticket-iva-ves');
+                // Buscar el div del total (para insertar antes)
+                const totalDiv = ticketTotal.closest('.flex.justify-between.font-bold');
+                
+                if (!ivaElement) {
+                    // Crear el elemento si no existe
+                    ivaElement = document.createElement('div');
+                    ivaElement.id = 'ticket-iva-ves';
+                    ivaElement.className = 'flex justify-between';
+                    if (totalDiv) {
+                        totalContainer.insertBefore(ivaElement, totalDiv);
+                    } else {
+                        // Fallback: insertar al final del contenedor
+                        totalContainer.appendChild(ivaElement);
+                    }
+                }
+                
+                // Mostrar u ocultar según condiciones
+                if (ivaPorcentaje > 0 && esMetodoVes && subtotalVes > 0) {
+                    ivaElement.style.display = 'flex';
+                    const ivaVes = subtotalVes * (ivaPorcentaje / 100);
+                    ivaElement.innerHTML = `<span>IVA (${ivaPorcentaje}%):</span><span>Bs ${formatearMonto(ivaVes)}</span>`;
+                } else {
+                    ivaElement.style.display = 'none';
+                }
+            }
+            // ============================================================
+
         } else {
             if (ticketSubtotalUsd) ticketSubtotalUsd.textContent = '$0,00';
             if (ticketSubtotalVes) ticketSubtotalVes.textContent = 'Bs 0,00';
             if (ticketTotal) ticketTotal.textContent = '$0,00';
+            
+            // Ocultar fila del IVA
+            const ivaElement = document.getElementById('ticket-iva-ves');
+            if (ivaElement) ivaElement.style.display = 'none';
         }
 
         controlarVisibilidadSubtotal();
