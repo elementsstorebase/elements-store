@@ -1467,8 +1467,28 @@ document.addEventListener('DOMContentLoaded', function() {
     }, 60000);
 
     // ==================================================================
-    //  INTEGRACIÓN CON IMPRESIÓN POR WEBUSB
+    //  INTEGRACIÓN CON IMPRESIÓN POR WEBUSB (CORREGIDO)
     // ==================================================================
+
+    // Función para sanitizar texto para impresoras POS (elimina acentos, eñes, caracteres especiales)
+    function sanitizarPOS(texto) {
+        if (!texto) return '';
+        return texto.toString()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/ñ/g, "n")
+            .replace(/Ñ/g, "N")
+            .replace(/á/g, "a")
+            .replace(/é/g, "e")
+            .replace(/í/g, "i")
+            .replace(/ó/g, "o")
+            .replace(/ú/g, "u")
+            .replace(/Á/g, "A")
+            .replace(/É/g, "E")
+            .replace(/Í/g, "I")
+            .replace(/Ó/g, "O")
+            .replace(/Ú/g, "U");
+    }
 
     // Verificar compatibilidad y agregar botón dinámicamente
     function agregarBotonUSB() {
@@ -1499,66 +1519,137 @@ document.addEventListener('DOMContentLoaded', function() {
             this.style.background = '#0d9488';
         });
 
-        btn.addEventListener('click', function() {
-            const clienteData = obtenerDatosCliente();
-            const totalUsd = carrito.reduce((sum, item) => {
-                const precio = getPrecioConDescuento(item);
-                return sum + (precio * item.cantidad);
-            }, 0);
+        btn.addEventListener('click', async function() {
+            // Deshabilitar botón para evitar doble clic
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Procesando venta...';
 
-            let subtotalVes = 0;
-            switch(tasaSeleccionada) {
-                case 'usd':
-                    subtotalVes = totalUsd * tasaUsd;
-                    break;
-                case 'bcv_usd':
-                    subtotalVes = totalUsd * tasaUsd;
-                    break;
-                case 'bcv_eur':
-                    subtotalVes = totalUsd * tasaEur;
-                    break;
-                case 'personalizada':
-                    subtotalVes = totalUsd * tasaPersonalizada;
-                    break;
-                case 'bs_personalizado':
-                    subtotalVes = parseMontoVES(bsPersonalizadoInput.value) || 0;
-                    break;
-                case 'usd_personalizado':
+            try {
+                // 1. Obtener datos del cliente y carrito
+                const clienteData = obtenerDatosCliente();
+                if (!clienteData.nombre || !clienteData.apellido || !clienteData.cedula) {
+                    alert('Nombre, apellido y cédula son obligatorios');
+                    btn.disabled = false;
+                    btn.innerHTML = '🖨️ Imprimir por USB (WebUSB)';
+                    return;
+                }
+
+                if (carrito.length === 0) {
+                    alert('El carrito está vacío');
+                    btn.disabled = false;
+                    btn.innerHTML = '🖨️ Imprimir por USB (WebUSB)';
+                    return;
+                }
+
+                if (tasaSeleccionada === 'bs_personalizado') {
+                    const montoBs = parseMontoVES(bsPersonalizadoInput.value) || 0;
+                    if (montoBs <= 0) {
+                        alert('Ingrese un monto en Bs para el método de cobro personalizado');
+                        btn.disabled = false;
+                        btn.innerHTML = '🖨️ Imprimir por USB (WebUSB)';
+                        return;
+                    }
+                }
+
+                if (tasaSeleccionada === 'usd_personalizado') {
                     const montoUsd = parseFloat(usdPersonalizadoInput.value) || 0;
-                    subtotalVes = montoUsd * tasaUsd;
-                    break;
-                default:
-                    subtotalVes = totalUsd * tasaUsd;
-            }
+                    if (montoUsd <= 0) {
+                        alert('Ingrese un monto en USD para el método de cobro personalizado');
+                        btn.disabled = false;
+                        btn.innerHTML = '🖨️ Imprimir por USB (WebUSB)';
+                        return;
+                    }
+                }
 
-            const numTicket = numeroTicket || '00000';
-            const ahora = new Date();
-            const fechaStr = ahora.toLocaleString('es-VE', {
-                day: '2-digit',
-                month: '2-digit',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
-            });
+                // 2. Obtener o crear cliente
+                let clienteId = null;
+                const clientesResp = await fetch(`/api/clientes?cedula=${encodeURIComponent(clienteData.cedula)}`);
+                const clientes = await clientesResp.json();
+                if (clientes.length > 0) {
+                    clienteId = clientes[0].id;
+                } else {
+                    const crearResp = await fetch('/api/clientes', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(clienteData)
+                    });
+                    const nuevoCliente = await crearResp.json();
+                    clienteId = nuevoCliente.id;
+                }
 
-            const datosUSB = {
-                carrito: carrito,
-                cliente: clienteData,
-                totalUsd: totalUsd,
-                subtotalVes: subtotalVes,
-                metodoPago: metodoPago.options[metodoPago.selectedIndex].text,
-                tasa: tasaUsd,
-                configTicket: configTicket,
-                numeroTicket: numTicket,
-                fecha: fechaStr,
-                ventaId: null
-            };
+                // 3. Preparar datos de la venta
+                const items = carrito.map(item => ({
+                    producto_id: item.id,
+                    cantidad: item.cantidad,
+                    descuento_porcentaje: item.descuento || 0
+                }));
 
-            if (typeof window.imprimirTicketUSB === 'function') {
-                window.imprimirTicketUSB(datosUSB);
-            } else {
-                alert('❌ Módulo de impresión USB no cargado. Verifica que el archivo impresion_usb.js esté incluido.');
+                const data = {
+                    cliente_id: clienteId,
+                    items: items,
+                    metodo_pago: metodoPago.value,
+                    metodo_cobro: tasaSeleccionada,
+                    cliente_nombre: clienteData.nombre,
+                    cliente_apellido: clienteData.apellido,
+                    cliente_cedula: clienteData.cedula,
+                    cliente_telefono: clienteData.telefono,
+                    cliente_direccion: clienteData.direccion
+                };
+
+                if (tasaSeleccionada === 'bs_personalizado') {
+                    data.total_cobro = parseMontoVES(bsPersonalizadoInput.value) || 0;
+                } else if (tasaSeleccionada === 'usd_personalizado') {
+                    data.total_cobro = parseFloat(usdPersonalizadoInput.value) || 0;
+                }
+
+                // 4. Registrar la venta en el servidor (ESPERAR RESPUESTA)
+                const ventaResp = await fetch('/api/ventas', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                if (!ventaResp.ok) {
+                    const errData = await ventaResp.json();
+                    throw new Error(errData.error || 'Error al registrar la venta');
+                }
+
+                const ventaData = await ventaResp.json();
+
+                // 5. Extraer datos de la respuesta del servidor
+                const { venta, detalles, cliente, config_ticket } = ventaData;
+
+                // 6. Llamar a la función de impresión WebUSB con los datos del servidor
+                if (typeof window.imprimirTicketUSB === 'function') {
+                    // Actualizar el ticket virtual con el número real
+                    if (venta.numero_ticket) {
+                        numeroTicket = String(venta.numero_ticket).padStart(5, '0');
+                        if (ticketNumero) ticketNumero.textContent = numeroTicket;
+                    }
+
+                    // Mostrar mensaje de éxito antes de imprimir
+                    alert('✅ Venta registrada exitosamente. Enviando ticket a la impresora...');
+
+                    // Llamar a la impresión con los datos del servidor
+                    await window.imprimirTicketUSB({
+                        venta: venta,
+                        detalles: detalles,
+                        cliente: cliente,
+                        configTicket: config_ticket
+                    });
+
+                    // Limpiar venta después de imprimir
+                    limpiarVenta();
+                } else {
+                    alert('❌ Módulo de impresión USB no cargado. El ticket se generó pero no se imprimió.');
+                }
+
+            } catch (err) {
+                alert('❌ Error: ' + err.message);
+                console.error('Error en flujo WebUSB:', err);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '🖨️ Imprimir por USB (WebUSB)';
             }
         });
 

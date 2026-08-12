@@ -111,7 +111,6 @@
                 <div class="card">
                     <div class="flex justify-between items-center mb-2">
                         <h4 class="font-semibold text-gray-700">Método de Cobro</h4>
-                        <!-- NUEVO BOTÓN: Actualizar Tasas -->
                         <button id="btn-actualizar-tasas" class="btn-primary text-xs py-1 px-3">
                             <i class="fas fa-sync-alt mr-1"></i> Actualizar Tasas
                         </button>
@@ -125,26 +124,22 @@
                         <option value="usd_personalizado">Dólar Personalizado</option>
                     </select>
                     
-                    <!-- Contenedor para Bolívar Personalizado -->
                     <div id="bs-personalizado-container" class="mt-2 hidden">
                         <label class="block text-sm font-medium text-gray-700">Monto en Bs (Personalizado)</label>
                         <input type="number" id="bs-personalizado-input" step="0.01" class="input-field" placeholder="Ingrese el monto en Bs">
                     </div>
                     
-                    <!-- Contenedor para Dólar Personalizado -->
                     <div id="usd-personalizado-container" class="mt-2 hidden">
                         <label class="block text-sm font-medium text-gray-700">Monto en USD (Personalizado)</label>
                         <input type="number" id="usd-personalizado-input" step="0.01" class="input-field" placeholder="Ingrese el monto en USD">
                     </div>
 
-                    <!-- Equivalente en USD (para Bs Personalizado) -->
                     <div id="equivalente-usd-container" class="mt-2 text-sm text-gray-500 hidden">
                         <span class="font-medium">Equivalente en USD:</span>
                         <span id="equivalente-usd">$0.00</span>
                         <span class="text-xs text-gray-400">(calculado con tasa BCV USD)</span>
                     </div>
 
-                    <!-- Equivalente en VES (para Dólar Personalizado) -->
                     <div id="equivalente-ves-container" class="mt-2 text-sm text-gray-500 hidden">
                         <span class="font-medium">Equivalente en VES:</span>
                         <span id="equivalente-ves">Bs 0,00</span>
@@ -164,19 +159,16 @@
                 </div>
             </div>
 
-            <!-- BOTÓN PROCESAR VENTA -->
             <button id="btn-procesar-venta" class="btn-primary w-full py-3 text-lg">
                 <i class="fas fa-check-circle mr-2"></i> Procesar Venta
             </button>
         </div>
 
-        <!-- COLUMNA DERECHA: Ticket Virtual (2/5) -->
+        <!-- COLUMNA DERECHA: Ticket Virtual -->
         <div class="lg:col-span-2">
             <div class="card sticky top-6">
                 <h4 class="font-semibold text-gray-700 mb-3 text-center">🧾 Nota de Entrega</h4>
-                <!-- Ticket Virtual con diseño mejorado estilo 80mm -->
                 <div id="ticket-virtual" class="bg-white border-2 border-black rounded-none p-4 font-sans text-black max-w-xs mx-auto" style="font-family: 'Courier New', monospace; font-size: 12px;">
-                    <!-- Encabezado (configurable) -->
                     <div class="text-center border-b-2 border-black pb-2 mb-2">
                         <p class="font-bold text-base tracking-wider" id="ticket-tienda-nombre">ELEMENTS STORE</p>
                         <p class="text-xs" id="ticket-rif">RIF: J-12345678-9</p>
@@ -187,7 +179,6 @@
                         <p class="text-xs">Fecha: <span id="ticket-fecha"></span></p>
                     </div>
 
-                    <!-- Datos del Cliente -->
                     <div class="border-b-2 border-black pb-2 mb-2">
                         <p><span class="font-bold">Cliente:</span> <span id="ticket-cliente">-</span></p>
                         <p><span class="font-bold">Cédula:</span> <span id="ticket-cedula">-</span></p>
@@ -195,7 +186,6 @@
                         <p><span class="font-bold">Dirección:</span> <span id="ticket-direccion">-</span></p>
                     </div>
 
-                    <!-- Tabla de Productos (4 columnas) -->
                     <div class="border-b-2 border-black pb-2 mb-2">
                         <table class="ticket-table w-full text-xs">
                             <thead>
@@ -212,9 +202,7 @@
                         </table>
                     </div>
 
-                    <!-- Totales (configurables) -->
                     <div class="border-b-2 border-black pb-2 mb-2">
-                        <!-- Subtotal USD (se oculta según configuración) -->
                         <div id="ticket-subtotal-usd-container" class="flex justify-between">
                             <span>Subtotal USD:</span>
                             <span id="ticket-subtotal-usd">$0.00</span>
@@ -229,7 +217,6 @@
                         </div>
                     </div>
 
-                    <!-- Método de Pago y Cobro (Cobro se oculta si es personalizada) -->
                     <div class="text-xs border-b-2 border-black pb-2 mb-2">
                         <p><span class="font-bold">Método Pago:</span> <span id="ticket-pago">-</span></p>
                         <div id="ticket-metodo-cobro-container">
@@ -238,18 +225,15 @@
                         </div>
                     </div>
 
-                    <!-- Pie de página (configurable) -->
                     <div class="text-center text-xs pt-1">
                         <p class="font-bold" id="ticket-mensaje">¡Gracias por su compra!</p>
                         <p class="text-[10px]" id="ticket-url">www.elementsstore.com</p>
                     </div>
                 </div>
 
-                <!-- BOTONES DE ACCIÓN DEL TICKET -->
                 <button id="btn-generar-ticket" class="btn-primary w-full mt-3 text-sm">
                     <i class="fas fa-print mr-2"></i> Generar Ticket (PNG)
                 </button>
-                <!-- 🔥 NUEVO BOTÓN: GENERAR TICKET FÍSICO -->
                 <button id="btn-generar-ticket-fisico" class="btn-primary w-full mt-2 text-sm" style="background-color: #28a745;">
                     <i class="fas fa-receipt mr-2"></i> Generar Ticket Físico
                 </button>
@@ -259,5 +243,232 @@
 </div>
 
 <script src="{{ url_for('static', filename='js/salida.js') }}"></script>
-<script src="{{ url_for('static', filename='js/impresion_usb.js') }}"></script>
+
+<!-- ============================================================
+     MÓDULO DE IMPRESIÓN POR WebUSB (ESC/POS) - CORREGIDO
+     ============================================================ -->
+<script>
+    (function() {
+        'use strict';
+
+        // -------------------- CONFIGURACIÓN --------------------
+        const CONFIG = {
+            columnas: 32,
+            ESC: '\x1B',
+            GS: '\x1D',
+            LF: '\x0A',
+            CR: '\x0D'
+        };
+
+        // -------------------- SANITIZADOR ASCII --------------------
+        function sanitizarPOS(texto) {
+            if (!texto) return '';
+            return texto.toString()
+                .normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "")
+                .replace(/ñ/g, "n")
+                .replace(/Ñ/g, "N")
+                .replace(/á/g, "a")
+                .replace(/é/g, "e")
+                .replace(/í/g, "i")
+                .replace(/ó/g, "o")
+                .replace(/ú/g, "u")
+                .replace(/Á/g, "A")
+                .replace(/É/g, "E")
+                .replace(/Í/g, "I")
+                .replace(/Ó/g, "O")
+                .replace(/Ú/g, "U");
+        }
+
+        // -------------------- GENERADOR ESC/POS (usa datos del servidor) --------------------
+        function generarBufferTicket(datosServidor) {
+            const { venta, detalles, cliente, configTicket } = datosServidor;
+            const col = CONFIG.columnas;
+            const encoder = new TextEncoder();
+            let lines = [];
+
+            // Inicialización
+            lines.push(CONFIG.ESC + '@');
+            lines.push(CONFIG.ESC + 'a\x01'); // centrar
+
+            // Encabezado
+            lines.push(CONFIG.ESC + 'E\x01');
+            lines.push(centrarTexto(sanitizarPOS(configTicket.nombre_tienda || 'ELEMENTS STORE'), col));
+            lines.push(CONFIG.ESC + 'E\x00');
+            if (configTicket.telefono_tienda) {
+                lines.push(centrarTexto(sanitizarPOS(configTicket.telefono_tienda), col));
+            }
+            if (configTicket.direccion_tienda) {
+                lines.push(centrarTexto(sanitizarPOS(configTicket.direccion_tienda), col));
+            }
+            lines.push(separador(col, '-'));
+
+            // Número de ticket y fecha (desde el servidor)
+            lines.push(CONFIG.ESC + 'E\x01');
+            const numTicket = String(venta.numero_ticket).padStart(5, '0');
+            lines.push(centrarTexto(`NOTA DE ENTREGA No: ${numTicket}`, col));
+            lines.push(CONFIG.ESC + 'E\x00');
+            lines.push(centrarTexto(`Fecha: ${venta.fecha_formateada}`, col));
+            lines.push(separador(col, '-'));
+
+            // Cliente
+            lines.push(CONFIG.ESC + 'a\x00'); // izquierda
+            if (cliente) {
+                const nombreCompleto = sanitizarPOS(cliente.nombre_completo || '');
+                lines.push(`Cliente: ${nombreCompleto}`);
+                lines.push(`Cedula: ${sanitizarPOS(cliente.cedula || '-')}`);
+                if (cliente.telefono) {
+                    lines.push(`Telefono: ${sanitizarPOS(cliente.telefono)}`);
+                }
+                if (cliente.direccion && configTicket.mostrar_direccion_cliente) {
+                    lines.push(`Direccion: ${sanitizarPOS(cliente.direccion)}`);
+                }
+            } else {
+                lines.push('Cliente: Consumidor Final');
+                lines.push('Cedula: -');
+            }
+            lines.push(separador(col, '-'));
+
+            // Productos
+            lines.push(CONFIG.ESC + 'E\x01');
+            lines.push(alinearIzquierdaDerecha('Cant/Producto', 'Total', col));
+            lines.push(CONFIG.ESC + 'E\x00');
+            lines.push(separador(col, '-'));
+
+            detalles.forEach(item => {
+                const nombre = sanitizarPOS(item.nombre_producto || 'Producto');
+                const precio = item.precio_unitario_efectivo_usd || 0;
+                const cantidad = item.cantidad || 0;
+                const totalLinea = item.total_linea_usd || 0;
+
+                lines.push(nombre);
+                const detalle = `${cantidad}x @ $${precio.toFixed(2)}`;
+                const totalStr = `$${totalLinea.toFixed(2)}`;
+                lines.push(alinearIzquierdaDerecha(detalle, totalStr, col));
+            });
+
+            lines.push(separador(col, '-'));
+
+            // Totales (desde el servidor)
+            lines.push(CONFIG.ESC + 'E\x01');
+            lines.push(alinearIzquierdaDerecha('TOTAL USD:', `$${venta.total_usd.toFixed(2)}`, col));
+            lines.push(CONFIG.ESC + 'E\x00');
+            lines.push(separador(col, '-'));
+
+            lines.push(alinearIzquierdaDerecha('Tasa BCV:', `Bs ${venta.tasa_bcv.toFixed(2)}`, col));
+            const subtotalVes = venta.subtotal_ves || 0;
+            const totalVes = venta.total_ves || 0;
+            lines.push(alinearIzquierdaDerecha('SUBTOTAL VES:', `Bs ${formatearNumeroVES(subtotalVes)}`, col));
+
+            if (configTicket.ivaPorcentaje > 0) {
+                const ivaMonto = subtotalVes * (configTicket.ivaPorcentaje / 100);
+                const totalConIva = subtotalVes + ivaMonto;
+                lines.push(alinearIzquierdaDerecha(`IVA (${configTicket.ivaPorcentaje}%):`, `Bs ${formatearNumeroVES(ivaMonto)}`, col));
+                lines.push(CONFIG.ESC + 'E\x01');
+                lines.push(alinearIzquierdaDerecha('TOTAL VES:', `Bs ${formatearNumeroVES(totalConIva)}`, col));
+                lines.push(CONFIG.ESC + 'E\x00');
+            } else {
+                lines.push(CONFIG.ESC + 'E\x01');
+                lines.push(alinearIzquierdaDerecha('TOTAL VES:', `Bs ${formatearNumeroVES(totalVes)}`, col));
+                lines.push(CONFIG.ESC + 'E\x00');
+            }
+
+            lines.push(alinearIzquierdaDerecha('Metodo Pago:', sanitizarPOS(venta.metodo_pago || '-'), col));
+            lines.push(separador(col, '-'));
+
+            // Pie de página
+            lines.push(CONFIG.ESC + 'a\x01'); // centrar
+            if (configTicket.mensaje_agradecimiento) {
+                lines.push(sanitizarPOS(configTicket.mensaje_agradecimiento));
+            }
+            // Solo mostrar URL si está habilitada y no está vacía
+            if (configTicket.mostrar_url_web && configTicket.url_web && configTicket.url_web.trim() !== '') {
+                lines.push(sanitizarPOS(configTicket.url_web.trim()));
+            }
+
+            // Avanzar y cortar
+            lines.push(CONFIG.ESC + 'd\x03');
+            lines.push(CONFIG.GS + 'V\x00');
+
+            const text = lines.join(CONFIG.LF);
+            return encoder.encode(text);
+        }
+
+        // -------------------- FUNCIONES DE FORMATEO --------------------
+        function centrarTexto(texto, ancho) {
+            const pad = Math.max(0, ancho - texto.length);
+            const left = Math.floor(pad / 2);
+            const right = pad - left;
+            return ' '.repeat(left) + texto + ' '.repeat(right);
+        }
+
+        function alinearIzquierdaDerecha(izq, der, ancho) {
+            const disponible = ancho - der.length - 1;
+            const izqTrunc = izq.substring(0, disponible);
+            const espacios = Math.max(0, disponible - izqTrunc.length);
+            return izqTrunc + ' '.repeat(espacios) + der;
+        }
+
+        function separador(col, char) {
+            return char.repeat(col);
+        }
+
+        function formatearNumeroVES(valor) {
+            return valor.toFixed(2)
+                .replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+                .replace('.', 'X')
+                .replace(',', '.')
+                .replace('X', ',');
+        }
+
+        // -------------------- ENVÍO POR WEBUSB --------------------
+        async function enviarPorUSB(buffer) {
+            try {
+                const device = await navigator.usb.requestDevice({ filters: [] });
+                await device.open();
+                if (device.configuration === null) {
+                    await device.selectConfiguration(1);
+                }
+                const endpointOut = device.configuration.interfaces[0]?.alternate?.endpoints?.find(e => e.direction === 'out');
+                if (!endpointOut) {
+                    throw new Error('No se encontró un endpoint OUT en el dispositivo.');
+                }
+                await device.claimInterface(device.configuration.interfaces[0].interfaceNumber);
+                const result = await device.transferOut(endpointOut.endpointNumber, buffer);
+                if (result.status !== 'ok') {
+                    throw new Error('Error al transferir datos: ' + result.status);
+                }
+                await device.close();
+                return { success: true };
+            } catch (err) {
+                console.error('Error en WebUSB:', err);
+                throw err;
+            }
+        }
+
+        // -------------------- FUNCIÓN PRINCIPAL EXPUESTA --------------------
+        window.imprimirTicketUSB = async function(datosServidor) {
+            if (!datosServidor || !datosServidor.detalles || datosServidor.detalles.length === 0) {
+                alert('No hay datos del ticket para imprimir');
+                return;
+            }
+
+            if (!('usb' in navigator)) {
+                alert('❌ Tu navegador no soporta WebUSB.\nUsa Chrome/Edge 89+.\n\nSe usará la impresión HTML alternativa.');
+                return;
+            }
+
+            try {
+                const buffer = generarBufferTicket(datosServidor);
+                const resultado = await enviarPorUSB(buffer);
+                if (resultado.success) {
+                    alert('✅ Ticket enviado a la impresora por USB.');
+                }
+            } catch (err) {
+                alert('❌ Error al imprimir: ' + err.message);
+            }
+        };
+    })();
+</script>
+
 {% endblock %}

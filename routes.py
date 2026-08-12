@@ -1,5 +1,5 @@
 # ============================================================
-# routes.py - Elements Store (con correcciones)
+# routes.py - Elements Store (con correcciones y respuesta enriquecida para WebUSB)
 # ============================================================
 
 from flask import Blueprint, render_template, request, jsonify, current_app, send_file, session, redirect, url_for, flash
@@ -2146,6 +2146,7 @@ def reactivar_cliente(id):
 # API: VENTAS (PROTEGIDA) - CORREGIDO: TOTAL VES = SUBTOTAL + IVA
 # 🔥 MODIFICADO: uso de obtener_proximo_numero_ticket() (secuencia estricta)
 # 🔥 MODIFICADO: lógica mejorada para asignar cliente basado en datos del formulario
+# 🔥 MODIFICADO: respuesta enriquecida para WebUSB
 # ============================================================
 
 @api_bp.route('/ventas', methods=['POST'])
@@ -2507,7 +2508,72 @@ def registrar_venta():
     except Exception as e:
         print(f"⚠️ Error al imprimir ticket automático (POS-58): {e}")
 
-    return jsonify({
+    # ============================================================
+    # 🔥 RESPUESTA ENRIQUECIDA PARA WebUSB (CON TODOS LOS DATOS)
+    # ============================================================
+    # Obtener detalles de la venta recién creada para incluirlos en la respuesta
+    detalles_respuesta = []
+    for det in detalles:
+        producto = det.producto
+        detalles_respuesta.append({
+            'nombre_producto': producto.nombre if producto else "Producto eliminado",
+            'cantidad': det.cantidad,
+            'precio_unitario_efectivo_usd': float(det.precio_unitario_usd),
+            'total_linea_usd': float(det.precio_unitario_usd * det.cantidad)
+        })
+
+    # Datos del cliente
+    cliente_respuesta = None
+    if venta.cliente:
+        cliente_respuesta = {
+            'nombre_completo': f"{venta.cliente.nombre} {venta.cliente.apellido}",
+            'cedula': venta.cliente.cedula,
+            'telefono': venta.cliente.telefono or '',
+            'direccion': venta.cliente.direccion or ''
+        }
+
+    # Fecha local formateada
+    if venta.fecha.tzinfo is None:
+        fecha_utc = pytz.UTC.localize(venta.fecha)
+        fecha_local_resp = fecha_utc.astimezone(pytz.timezone('America/Caracas'))
+    else:
+        fecha_local_resp = venta.fecha.astimezone(pytz.timezone('America/Caracas'))
+    fecha_formateada_resp = fecha_local_resp.strftime('%d/%m/%Y, %I:%M:%S %p')
+    fecha_formateada_resp = fecha_formateada_resp.replace('AM', 'a. m.').replace('PM', 'p. m.')
+
+    # Determinar mostrar_url_web (si existe URL y no está vacía)
+    mostrar_url_web = bool(config_ticket.get('url_web', '').strip())
+
+    # Respuesta final
+    response_data = {
+        'success': True,
+        'venta': {
+            'numero_ticket': venta.numero_ticket,
+            'fecha_formateada': fecha_formateada_resp,
+            'total_usd': float(venta.total_usd),
+            'tasa_bcv': float(venta.tasa_bcv_usd),
+            'subtotal_ves': float(venta.subtotal_ves or 0),
+            'total_ves': float(venta.total_ves or 0),
+            'metodo_pago': venta.metodo_pago,
+            'metodo_cobro': venta.metodo_cobro
+        },
+        'detalles': detalles_respuesta,
+        'cliente': cliente_respuesta,
+        'config_ticket': {
+            'nombre_tienda': config_ticket.get('nombre_tienda', 'ELEMENTS STORE'),
+            'rif': config_ticket.get('rif', ''),
+            'telefono_tienda': config_ticket.get('telefono_tienda', ''),
+            'direccion_tienda': config_ticket.get('direccion_tienda', ''),
+            'mostrar_rif': config_ticket.get('mostrar_rif', True),
+            'mostrar_telefono': config_ticket.get('mostrar_telefono', True),
+            'mostrar_direccion_tienda': config_ticket.get('mostrar_direccion_tienda', True),
+            'mostrar_direccion_cliente': config_ticket.get('mostrar_direccion_cliente', True),
+            'mostrar_subtotal_usd': config_ticket.get('mostrar_subtotal_usd', False),
+            'porcentaje_iva': config_ticket.get('porcentaje_iva', 0),
+            'mensaje_agradecimiento': config_ticket.get('mensaje_agradecimiento', '¡Gracias por su compra!'),
+            'url_web': config_ticket.get('url_web', ''),
+            'mostrar_url_web': mostrar_url_web
+        },
         'mensaje': 'Venta registrada',
         'venta_id': venta.id,
         'numero_ticket': nuevo_ticket,
@@ -2518,7 +2584,9 @@ def registrar_venta():
         'moneda_cobro': moneda_cobro,
         'total_cobro': total_cobro,
         'ticket': ticket_path
-    }), 201
+    }
+
+    return jsonify(response_data), 201
 
 # ============================================================
 # API: LISTAR VENTAS (PROTEGIDA) - 🔥 CORRECCIÓN ZONA HORARIA Y FILTRO ANULADAS
