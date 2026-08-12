@@ -41,7 +41,6 @@
         .right { text-align: right; }
         .bold { font-weight: bold; }
 
-        /* Separadores tipo ticket térmico (punteados) */
         .separator-doble {
             border-top: 1px dashed #000;
             margin: 5px 0;
@@ -51,14 +50,12 @@
             margin: 4px 0;
         }
 
-        /* Filas con distribución izquierda - derecha */
         .flex-row {
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
         }
 
-        /* Estructura de producto a 2 líneas */
         .producto-block {
             margin-bottom: 4px;
         }
@@ -71,7 +68,6 @@
             padding-left: 10px;
         }
 
-        /* Tabla de totales */
         .tabla-totales {
             width: 100%;
             border-collapse: collapse;
@@ -81,7 +77,6 @@
             vertical-align: top;
         }
 
-        /* Estilos de Impresión */
         @media print {
             @page {
                 margin: 0;
@@ -112,7 +107,6 @@
             }
         }
 
-        /* Botones en pantalla */
         .no-imprimir {
             margin-top: 15px;
             display: flex;
@@ -136,6 +130,8 @@
 
     <div class="ticket-container">
         <div class="ticket">
+            <!-- DEBUG: subtotal={{ venta.subtotal_ves }}, total={{ venta.total_ves }} -->
+
             <!-- ENCABEZADO TIENDA -->
             <div class="center bold">{{ config_ticket.nombre_tienda }}</div>
             {% if config_ticket.mostrar_telefono and config_ticket.telefono_tienda %}
@@ -173,7 +169,7 @@
 
             <div class="separator-simple"></div>
 
-            <!-- LISTA DE PRODUCTOS (FORMATO 2 LÍNEAS) -->
+            <!-- LISTA DE PRODUCTOS -->
             {% for detalle in detalles %}
                 {% set producto = detalle.producto %}
                 {% set subtotal = detalle.precio_unitario_usd * detalle.cantidad %}
@@ -201,7 +197,7 @@
 
             <div class="separator-simple"></div>
 
-            <!-- TOTALES Y DATOS EN VES (con formato venezolano) -->
+            <!-- 🔥 TOTALES VES CON IVA DINÁMICO (CORREGIDO) -->
             <table class="tabla-totales">
                 <tr>
                     <td>Tasa BCV:</td>
@@ -212,23 +208,25 @@
                     <td class="right">Bs {{ "{:,.2f}".format(venta.subtotal_ves or 0).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
                 </tr>
 
-                {# 🔥 CORRECCIÓN: Calcular IVA a partir de la diferencia entre total_ves y subtotal_ves #}
-                {% set iva_monto = (venta.total_ves or 0) - (venta.subtotal_ves or 0) %}
-                {% if iva_monto > 0 %}
-                    {# Calcular el porcentaje aproximado (para mostrarlo en la etiqueta) #}
-                    {% set iva_porcentaje = (iva_monto / (venta.subtotal_ves or 1)) * 100 %}
+                {# 🔥 CÁLCULO DIRECTO DEL IVA A PARTIR DE LOS DATOS DE LA VENTA #}
+                {% set subtotal = venta.subtotal_ves|float %}
+                {% set total = venta.total_ves|float %}
+                {% set iva_monto = total - subtotal %}
+
+                {% if iva_monto > 0.005 %}  {# Margen de redondeo para evitar falsos positivos #}
+                    {% set iva_porcentaje = (iva_monto / subtotal) * 100 if subtotal > 0 else 0 %}
                     <tr>
                         <td>IVA ({{ "%.0f"|format(iva_porcentaje) }}%):</td>
                         <td class="right">Bs {{ "{:,.2f}".format(iva_monto).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
                     </tr>
                     <tr class="bold">
                         <td>TOTAL VES:</td>
-                        <td class="right">Bs {{ "{:,.2f}".format(venta.total_ves or 0).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                        <td class="right">Bs {{ "{:,.2f}".format(total).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
                     </tr>
                 {% else %}
                     <tr class="bold">
                         <td>TOTAL VES:</td>
-                        <td class="right">Bs {{ "{:,.2f}".format(venta.subtotal_ves or 0).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                        <td class="right">Bs {{ "{:,.2f}".format(subtotal).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
                     </tr>
                 {% endif %}
 
