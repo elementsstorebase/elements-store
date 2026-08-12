@@ -201,7 +201,7 @@
 
             <div class="separator-simple"></div>
 
-            <!-- TOTALES Y DATOS EN VES (con formato venezolano: punto para miles, coma para decimales) -->
+            <!-- TOTALES Y DATOS EN VES (con formato venezolano) -->
             <table class="tabla-totales">
                 <tr>
                     <td>Tasa BCV:</td>
@@ -211,16 +211,19 @@
                     <td>SUBTOTAL VES:</td>
                     <td class="right">Bs {{ "{:,.2f}".format(venta.subtotal_ves or 0).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
                 </tr>
-                {% if config_ticket.porcentaje_iva > 0 %}
-                    {% set iva_monto = (venta.subtotal_ves or 0) * (config_ticket.porcentaje_iva / 100) %}
-                    {% set total_ves_final = (venta.subtotal_ves or 0) + iva_monto %}
+
+                {# 🔥 CORRECCIÓN: Calcular IVA a partir de la diferencia entre total_ves y subtotal_ves #}
+                {% set iva_monto = (venta.total_ves or 0) - (venta.subtotal_ves or 0) %}
+                {% if iva_monto > 0 %}
+                    {# Calcular el porcentaje aproximado (para mostrarlo en la etiqueta) #}
+                    {% set iva_porcentaje = (iva_monto / (venta.subtotal_ves or 1)) * 100 %}
                     <tr>
-                        <td>IVA ({{ config_ticket.porcentaje_iva|int }}%):</td>
+                        <td>IVA ({{ "%.0f"|format(iva_porcentaje) }}%):</td>
                         <td class="right">Bs {{ "{:,.2f}".format(iva_monto).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
                     </tr>
                     <tr class="bold">
                         <td>TOTAL VES:</td>
-                        <td class="right">Bs {{ "{:,.2f}".format(total_ves_final).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                        <td class="right">Bs {{ "{:,.2f}".format(venta.total_ves or 0).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
                     </tr>
                 {% else %}
                     <tr class="bold">
@@ -228,6 +231,7 @@
                         <td class="right">Bs {{ "{:,.2f}".format(venta.subtotal_ves or 0).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
                     </tr>
                 {% endif %}
+
                 <tr>
                     <td>Metodo Pago:</td>
                     <td class="right">{{ venta.metodo_pago }}</td>
