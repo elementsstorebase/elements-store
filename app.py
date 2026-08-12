@@ -1,6 +1,6 @@
 from flask import Flask, render_template, jsonify, request, send_file
 from models import db, Deuda  # 🔥 Importación explícita de Deuda
-from routes import main_bp, api_bp
+from routes import main_bp, api_bp  # ❌ Eliminamos la importación de la migración
 from utils import inicializar_datos_defecto, obtener_tasas_bcv, guardar_historial_tasas, obtener_tasa_personalizada
 import os
 import sys
@@ -9,7 +9,7 @@ import time  # 🔥 AÑADIDO para time.tzset()
 import pytz  # 🔥 AÑADIDO para manejo de zona horaria
 from dotenv import load_dotenv
 from werkzeug.security import generate_password_hash
-from sqlalchemy import text  # 🔥 NUEVO: para ejecutar SQL crudo en PostgreSQL
+from sqlalchemy import text, inspect  # 🔥 AÑADIDO inspect y text
 
 # ---------- CONFIGURACIÓN DE ZONA HORARIA VENEZUELA (UTC-4) ----------
 os.environ['TZ'] = 'America/Caracas'
@@ -418,14 +418,72 @@ def inicializar_cuentas_financieras():
         db.session.rollback()
         print(f"⚠️ Error al inicializar cuentas financieras: {e}")
 
+# ============================================================
+# 🔥 NUEVA FUNCIÓN DE MIGRACIÓN DIRECTA PARA 'anulado' y 'fecha_anulacion'
+# ============================================================
+def migrar_columnas_ventas_directo():
+    """
+    Verifica y agrega las columnas 'anulado' y 'fecha_anulacion' a la tabla 'ventas'
+    usando inspect y text() para máxima compatibilidad.
+    """
+    try:
+        inspector = inspect(db.engine)
+        
+        # Verificar si la tabla existe
+        if not inspector.has_table('ventas'):
+            print("ℹ️ La tabla 'ventas' no existe. Se creará con db.create_all().")
+            return
+        
+        # Obtener columnas actuales
+        columnas = [col['name'] for col in inspector.get_columns('ventas')]
+        
+        # Determinar el dialecto
+        dialect = db.engine.dialect.name
+        
+        # Agregar columna 'anulado' si no existe
+        if 'anulado' not in columnas:
+            print("🔧 Agregando columna 'anulado' a la tabla 'ventas'...")
+            if dialect == 'postgresql':
+                sql = text("ALTER TABLE ventas ADD COLUMN anulado BOOLEAN DEFAULT FALSE")
+            else:
+                sql = text("ALTER TABLE ventas ADD COLUMN anulado BOOLEAN DEFAULT 0")
+            db.session.execute(sql)
+            db.session.commit()
+            print("✅ Columna 'anulado' agregada correctamente.")
+        else:
+            print("✅ La columna 'anulado' ya existe en 'ventas'.")
+        
+        # Agregar columna 'fecha_anulacion' si no existe
+        if 'fecha_anulacion' not in columnas:
+            print("🔧 Agregando columna 'fecha_anulacion' a la tabla 'ventas'...")
+            if dialect == 'postgresql':
+                sql = text("ALTER TABLE ventas ADD COLUMN fecha_anulacion TIMESTAMP")
+            else:
+                sql = text("ALTER TABLE ventas ADD COLUMN fecha_anulacion DATETIME")
+            db.session.execute(sql)
+            db.session.commit()
+            print("✅ Columna 'fecha_anulacion' agregada correctamente.")
+        else:
+            print("✅ La columna 'fecha_anulacion' ya existe en 'ventas'.")
+            
+    except Exception as e:
+        db.session.rollback()
+        print(f"⚠️ Error al migrar columnas de ventas: {e}")
+        import traceback
+        traceback.print_exc()
+
 # ---------- INICIALIZACIÓN ----------
 with app.app_context():
     # 1. Crear todas las tablas (incluyendo Usuario si es nuevo)
     db.create_all()
     print("✅ Base de datos verificada/creada con SQLAlchemy.")
     
+    # 🔥 MIGRACIÓN PRIORITARIA: agregar columnas 'anulado' y 'fecha_anulacion' a ventas
+    # (usando la función local, no la de routes)
+    print(">>> Ejecutando migración directa de columnas para ventas...")
+    migrar_columnas_ventas_directo()
+    
     # 🔥 MIGRACIÓN PRIORITARIA: agregar columna 'activo' en clientes
-    # Esto debe ejecutarse SIEMPRE, independientemente del motor
     migrar_columna_activo()
     
     # Solo ejecutar migraciones específicas de SQLite si se usa SQLite localmente

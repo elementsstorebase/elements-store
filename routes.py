@@ -24,6 +24,7 @@ api_bp = Blueprint('api', __name__)
 
 # ============================================================
 # 🔥 MIGRACIÓN AUTOMÁTICA: AGREGAR COLUMNAS 'anulado' Y 'fecha_anulacion' A 'ventas'
+# CORREGIDA USANDO inspect() Y db.session.execute()
 # ============================================================
 def agregar_columnas_venta_si_no_existen():
     """
@@ -31,11 +32,17 @@ def agregar_columnas_venta_si_no_existen():
     Si no, las agrega con SQL ALTER TABLE (compatible con SQLite y PostgreSQL).
     """
     try:
-        if not db.engine.dialect.has_table(db.engine, 'ventas'):
+        from sqlalchemy import inspect
+        inspector = inspect(db.engine)
+        # Verificar si la tabla existe
+        if not inspector.has_table('ventas'):
+            print("ℹ️ La tabla 'ventas' no existe. Se creará con db.create_all() más adelante.")
             return
-        inspector = db.inspect(db.engine)
+        
+        # Obtener columnas actuales
         columns = [col['name'] for col in inspector.get_columns('ventas')]
         
+        # Agregar columna 'anulado' si no existe
         if 'anulado' not in columns:
             print("🔧 Agregando columna 'anulado' a la tabla 'ventas'...")
             if db.engine.dialect.name == 'postgresql':
@@ -44,7 +51,10 @@ def agregar_columnas_venta_si_no_existen():
                 db.session.execute("ALTER TABLE ventas ADD COLUMN anulado BOOLEAN DEFAULT 0")
             db.session.commit()
             print("✅ Columna 'anulado' agregada.")
+        else:
+            print("✅ La columna 'anulado' ya existe en 'ventas'.")
         
+        # Agregar columna 'fecha_anulacion' si no existe
         if 'fecha_anulacion' not in columns:
             print("🔧 Agregando columna 'fecha_anulacion' a la tabla 'ventas'...")
             if db.engine.dialect.name == 'postgresql':
@@ -53,8 +63,12 @@ def agregar_columnas_venta_si_no_existen():
                 db.session.execute("ALTER TABLE ventas ADD COLUMN fecha_anulacion DATETIME")
             db.session.commit()
             print("✅ Columna 'fecha_anulacion' agregada.")
+        else:
+            print("✅ La columna 'fecha_anulacion' ya existe en 'ventas'.")
+            
     except Exception as e:
         print(f"⚠️ Error al agregar columnas a 'ventas': {e}")
+        db.session.rollback()
 
 # ============================================================
 # 🔥 MIGRACIÓN DESACTIVADA: Ahora se ejecuta desde app.py con contexto de aplicación.
