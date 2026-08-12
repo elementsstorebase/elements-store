@@ -5,12 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Nota de Entrega #{{ venta.numero_ticket }}</title>
     <style>
-        /* Estilos para pantalla */
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
+        
         body {
             font-family: 'Courier New', Courier, monospace;
             background: #f5f5f5;
@@ -18,141 +18,75 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            min-height: 100vh;
         }
+
         .ticket-container {
-            max-width: 80mm;
-            width: 100%;
+            width: 58mm;
+            max-width: 58mm;
             background: white;
-            padding: 12px 10px;
+            padding: 10px 4px;
             border: 1px solid #ddd;
             border-radius: 4px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
+
         .ticket {
-            font-size: 12px;
-            line-height: 1.4;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 11px;
+            line-height: 1.25;
             color: #000;
         }
-        .ticket .center {
-            text-align: center;
+
+        .center { text-align: center; }
+        .right { text-align: right; }
+        .bold { font-weight: bold; }
+
+        /* Separadores tipo ticket térmico (punteados) */
+        .separator-doble {
+            border-top: 1px dashed #000;
+            margin: 5px 0;
         }
-        .ticket .right {
-            text-align: right;
-        }
-        .ticket .left {
-            text-align: left;
-        }
-        .ticket .bold {
-            font-weight: bold;
-        }
-        .ticket .separator-doble {
-            border-top: 2px solid #000;
+        .separator-simple {
+            border-top: 1px dashed #000;
             margin: 4px 0;
-        }
-        .ticket .separator-simple {
-            border-top: 1px solid #000;
-            margin: 4px 0;
-        }
-        .ticket .producto-linea {
-            display: flex;
-            justify-content: space-between;
-            font-size: 11px;
-        }
-        .ticket .producto-nombre {
-            flex: 1;
-            padding-right: 8px;
-        }
-        .ticket .producto-cantidad {
-            text-align: center;
-            min-width: 30px;
-        }
-        .ticket .producto-precio {
-            text-align: right;
-            min-width: 60px;
-        }
-        .ticket .producto-total {
-            text-align: right;
-            min-width: 60px;
-        }
-        .ticket .totales td {
-            padding: 2px 0;
-        }
-        .ticket .totales .label {
-            text-align: left;
-        }
-        .ticket .totales .value {
-            text-align: right;
-        }
-        .ticket .footer-mensaje {
-            margin-top: 6px;
-            text-align: center;
-            font-size: 12px;
-        }
-        .ticket .footer-url {
-            text-align: center;
-            font-size: 10px;
-            color: #555;
-        }
-        /* Bloque de depuración (solo visible en pantalla) */
-        .debug-info {
-            margin-top: 20px;
-            padding: 10px;
-            background: #fff3cd;
-            border: 1px solid #ffeeba;
-            border-radius: 4px;
-            font-size: 12px;
-            font-family: monospace;
-            color: #856404;
-            max-width: 80mm;
-            width: 100%;
-        }
-        .debug-info strong {
-            color: #533f03;
-        }
-        .no-imprimir {
-            margin-top: 20px;
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-            justify-content: center;
-        }
-        .no-imprimir button {
-            padding: 10px 24px;
-            font-size: 16px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            background: #4f46e5;
-            color: white;
-            transition: background 0.2s;
-        }
-        .no-imprimir button:hover {
-            background: #4338ca;
-        }
-        .no-imprimir button.btn-cerrar {
-            background: #6b7280;
-        }
-        .no-imprimir button.btn-cerrar:hover {
-            background: #4b5563;
         }
 
-        /* ================================================================
-           ESTILOS PARA IMPRESIÓN (OPTIMIZADOS PARA DENSIDAD Y ALINEACIÓN)
-           ================================================================ */
+        /* Filas con distribución izquierda - derecha */
+        .flex-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        /* Estructura de producto a 2 líneas */
+        .producto-block {
+            margin-bottom: 4px;
+        }
+        .producto-nombre {
+            word-break: break-all;
+        }
+        .producto-detalle {
+            display: flex;
+            justify-content: space-between;
+            padding-left: 10px;
+        }
+
+        /* Tabla de totales */
+        .tabla-totales {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .tabla-totales td {
+            padding: 1px 0;
+            vertical-align: top;
+        }
+
+        /* Estilos de Impresión */
         @media print {
-            /* Elimina márgenes de página y fija ancho a 58mm */
             @page {
                 margin: 0;
                 size: 58mm auto;
             }
-
-            /* Fuerza colores exactos y desactiva suavizado en todo el documento */
-            * {
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-            }
-
             body {
                 background: white !important;
                 padding: 0 !important;
@@ -161,276 +95,156 @@
                 -webkit-font-smoothing: none !important;
                 -moz-osx-font-smoothing: grayscale !important;
             }
-
             .ticket-container {
                 width: 58mm !important;
                 max-width: 58mm !important;
-                padding: 0 !important;
+                padding: 2mm 1mm !important;
                 margin: 0 !important;
                 border: none !important;
-                border-radius: 0 !important;
                 box-shadow: none !important;
-                background: white !important;
             }
-
-            /* --- Texto del ticket: negro puro, negrita, tamaño compacto --- */
             .ticket {
                 font-size: 10px !important;
-                line-height: 1.1 !important;
-                background: white !important;
-                color: #000000 !important;
-                font-weight: bold !important;
-                padding: 0 !important;
+                line-height: 1.2 !important;
             }
-
-            .ticket * {
-                color: #000000 !important;
-                font-weight: bold !important;
-            }
-
-            /* Ajuste del nombre de la tienda (más grande pero dentro del ancho) */
-            .ticket .center.bold[style*="font-size: 16px;"] {
-                font-size: 12px !important;
-            }
-
-            /* --- Líneas de productos: columnas fijas para alineación exacta --- */
-            .ticket .producto-linea {
-                display: flex !important;
-                justify-content: space-between !important;
-                font-size: 9px !important;
-                padding: 0 !important;
-                margin: 0 !important;
-            }
-
-            .ticket .producto-nombre {
-                flex: 0 0 50% !important;
-                max-width: 50% !important;
-                padding-right: 2px !important;
-                white-space: nowrap !important;
-                overflow: hidden !important;
-                text-overflow: ellipsis !important;
-            }
-
-            .ticket .producto-cantidad {
-                flex: 0 0 15% !important;
-                max-width: 15% !important;
-                text-align: center !important;
-            }
-
-            .ticket .producto-precio {
-                flex: 0 0 17% !important;
-                max-width: 17% !important;
-                text-align: right !important;
-            }
-
-            .ticket .producto-total {
-                flex: 0 0 18% !important;
-                max-width: 18% !important;
-                text-align: right !important;
-            }
-
-            /* --- Encabezado de columnas (Producto, Cant, Precio, Total) --- */
-            /* Se selecciona el div con el estilo inline que contiene los encabezados */
-            .ticket > div[style*="display: flex; justify-content: space-between;"] {
-                font-size: 9px !important;
-                font-weight: bold !important;
-            }
-
-            .ticket > div[style*="display: flex; justify-content: space-between;"] span {
-                flex: 0 0 auto !important;
-                font-weight: bold !important;
-                font-size: 9px !important;
-            }
-
-            .ticket > div[style*="display: flex; justify-content: space-between;"] span:nth-child(1) {
-                flex: 0 0 50% !important;
-                text-align: left !important;
-            }
-            .ticket > div[style*="display: flex; justify-content: space-between;"] span:nth-child(2) {
-                flex: 0 0 15% !important;
-                text-align: center !important;
-            }
-            .ticket > div[style*="display: flex; justify-content: space-between;"] span:nth-child(3) {
-                flex: 0 0 17% !important;
-                text-align: right !important;
-            }
-            .ticket > div[style*="display: flex; justify-content: space-between;"] span:nth-child(4) {
-                flex: 0 0 18% !important;
-                text-align: right !important;
-            }
-
-            /* --- Separadores más finos pero nítidos --- */
-            .ticket .separator-doble {
-                border-top: 1.5px solid #000 !important;
-                margin: 2px 0 !important;
-            }
-            .ticket .separator-simple {
-                border-top: 0.5px solid #000 !important;
-                margin: 2px 0 !important;
-            }
-
-            /* --- Tabla de totales --- */
-            .ticket .totales td {
-                padding: 1px 0 !important;
-                font-size: 9px !important;
-            }
-
-            /* --- Pie de página --- */
-            .ticket .footer-mensaje {
-                font-size: 9px !important;
-                margin-top: 4px !important;
-            }
-            .ticket .footer-url {
-                font-size: 8px !important;
-            }
-
-            /* Ocultar elementos de control y depuración */
-            .no-imprimir,
-            .debug-info {
+            .no-imprimir, .debug-info {
                 display: none !important;
             }
+        }
+
+        /* Botones en pantalla */
+        .no-imprimir {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+        }
+        .no-imprimir button {
+            padding: 8px 16px;
+            font-size: 14px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background: #4f46e5;
+            color: white;
+        }
+        .no-imprimir button.btn-cerrar {
+            background: #6b7280;
         }
     </style>
 </head>
 <body>
+
     <div class="ticket-container">
         <div class="ticket">
-            <!-- Encabezado: Tienda -->
-            <div class="center bold" style="font-size: 16px;">{{ config_ticket.nombre_tienda }}</div>
-            {% if config_ticket.mostrar_rif and config_ticket.rif %}
-                <div class="center">{{ config_ticket.rif }}</div>
-            {% endif %}
+            <!-- ENCABEZADO TIENDA -->
+            <div class="center bold">{{ config_ticket.nombre_tienda }}</div>
             {% if config_ticket.mostrar_telefono and config_ticket.telefono_tienda %}
                 <div class="center">{{ config_ticket.telefono_tienda }}</div>
             {% endif %}
             {% if config_ticket.mostrar_direccion_tienda and config_ticket.direccion_tienda %}
                 <div class="center">{{ config_ticket.direccion_tienda }}</div>
             {% endif %}
+
             <div class="separator-doble"></div>
 
-            <!-- Número de ticket y fecha (AHORA CON HORA LOCAL) -->
-            <div class="center bold">NOTA DE ENTREGA N°: {{ "%05d" % venta.numero_ticket }}</div>
-            <div class="center">Fecha: {{ fecha_local.strftime('%d/%m/%Y, %I:%M:%S %p') }}</div>
+            <!-- NOTA Y FECHA -->
+            <div class="center bold">NOTA DE ENTREGA No: {{ "%05d" % venta.numero_ticket }}</div>
+            <div class="center">Fecha: {{ fecha_local.strftime('%d/%m/%Y %I:%M %p') }}</div>
+
             <div class="separator-doble"></div>
 
-            <!-- Cliente -->
-            <div><span class="bold">Cliente:</span> {{ cliente.nombre ~ ' ' ~ cliente.apellido if cliente else 'Consumidor Final' }}</div>
-            <div><span class="bold">Cédula:</span> {{ cliente.cedula if cliente else '-' }}</div>
+            <!-- DATOS CLIENTE -->
+            <div>Cliente: {{ cliente.nombre ~ ' ' ~ cliente.apellido if cliente else 'Consumidor Final' }}</div>
+            <div>Cedula: {{ cliente.cedula if cliente else '-' }}</div>
             {% if cliente and cliente.telefono %}
-                <div><span class="bold">Teléfono:</span> {{ cliente.telefono }}</div>
+                <div>Telefono: {{ cliente.telefono }}</div>
             {% endif %}
-            <!-- 🔥 DIRECCIÓN: se muestra SOLO si la configuración lo permite Y el cliente tiene dirección -->
             {% if cliente and cliente.direccion and config_ticket.mostrar_direccion_cliente %}
-                <div><span class="bold">Dirección:</span> {{ cliente.direccion }}</div>
+                <div>Direccion: {{ cliente.direccion }}</div>
             {% endif %}
+
             <div class="separator-simple"></div>
 
-            <!-- Detalle de productos -->
-            <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 11px;">
-                <span>Producto</span>
-                <span style="text-align: center; min-width: 30px;">Cant</span>
-                <span style="text-align: right; min-width: 60px;">Precio</span>
-                <span style="text-align: right; min-width: 60px;">Total</span>
+            <!-- CABECERA PRODUCTOS -->
+            <div class="flex-row bold">
+                <span>Cant/Producto</span>
+                <span>Total</span>
             </div>
+
             <div class="separator-simple"></div>
 
+            <!-- LISTA DE PRODUCTOS (FORMATO 2 LÍNEAS) -->
             {% for detalle in detalles %}
                 {% set producto = detalle.producto %}
                 {% set subtotal = detalle.precio_unitario_usd * detalle.cantidad %}
-                <div class="producto-linea">
-                    <span class="producto-nombre">
+                <div class="producto-block">
+                    <div class="producto-nombre">
                         {{ producto.nombre if producto else 'Producto eliminado' }}
                         {% if detalle.descuento_porcentaje and detalle.descuento_porcentaje > 0 %}
                             ({{ detalle.descuento_porcentaje|int }}% off)
                         {% endif %}
-                    </span>
-                    <span class="producto-cantidad">{{ detalle.cantidad }}</span>
-                    <span class="producto-precio">${{ "%.2f"|format(detalle.precio_unitario_usd) }}</span>
-                    <span class="producto-total">${{ "%.2f"|format(subtotal) }}</span>
+                    </div>
+                    <div class="producto-detalle">
+                        <span>{{ detalle.cantidad }}x @ ${{ "%.2f"|format(detalle.precio_unitario_usd) }}</span>
+                        <span>${{ "%.2f"|format(subtotal) }}</span>
+                    </div>
                 </div>
             {% endfor %}
 
             <div class="separator-doble"></div>
 
-            <!-- Totales -->
-            <table class="totales" style="width:100%; font-size:12px;">
+            <!-- TOTAL USD -->
+            <div class="flex-row bold" style="font-size: 12px;">
+                <span>TOTAL USD:</span>
+                <span>${{ "%.2f"|format(venta.total_usd) }}</span>
+            </div>
+
+            <div class="separator-simple"></div>
+
+            <!-- TOTALES Y DATOS EN VES (con formato venezolano: punto para miles, coma para decimales) -->
+            <table class="tabla-totales">
                 <tr>
-                    <td class="label"><span class="bold">TOTAL USD:</span></td>
-                    <td class="value">${{ "%.2f"|format(venta.total_usd) }}</td>
+                    <td>Tasa BCV:</td>
+                    <td class="right">Bs {{ "%.2f"|format(tasa_mostrar or 0) }}</td>
                 </tr>
-                {% if config_ticket.mostrar_subtotal_usd %}
                 <tr>
-                    <td class="label">Subtotal USD:</td>
-                    <td class="value">${{ "%.2f"|format(venta.subtotal_usd or 0) }}</td>
-                </tr>
-                {% endif %}
-                <tr>
-                    <td class="label">Subtotal VES:</td>
-                    <td class="value">Bs {{ "{:,.2f}".format(venta.subtotal_ves or 0).replace(',', '.') }}</td>
+                    <td>SUBTOTAL VES:</td>
+                    <td class="right">Bs {{ "{:,.2f}".format(venta.subtotal_ves or 0).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
                 </tr>
                 {% if config_ticket.porcentaje_iva > 0 %}
                     {% set iva_monto = (venta.subtotal_ves or 0) * (config_ticket.porcentaje_iva / 100) %}
-                    <tr>
-                        <td class="label">IVA ({{ config_ticket.porcentaje_iva|int }}%):</td>
-                        <td class="value">Bs {{ "{:,.2f}".format(iva_monto).replace(',', '.') }}</td>
-                    </tr>
                     {% set total_ves_final = (venta.subtotal_ves or 0) + iva_monto %}
                     <tr>
-                        <td class="label"><span class="bold">TOTAL VES:</span></td>
-                        <td class="value">Bs {{ "{:,.2f}".format(total_ves_final).replace(',', '.') }}</td>
+                        <td>IVA ({{ config_ticket.porcentaje_iva|int }}%):</td>
+                        <td class="right">Bs {{ "{:,.2f}".format(iva_monto).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
+                    </tr>
+                    <tr class="bold">
+                        <td>TOTAL VES:</td>
+                        <td class="right">Bs {{ "{:,.2f}".format(total_ves_final).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
                     </tr>
                 {% else %}
-                    <tr>
-                        <td class="label"><span class="bold">TOTAL VES:</span></td>
-                        <td class="value">Bs {{ "{:,.2f}".format(venta.subtotal_ves or 0).replace(',', '.') }}</td>
+                    <tr class="bold">
+                        <td>TOTAL VES:</td>
+                        <td class="right">Bs {{ "{:,.2f}".format(venta.subtotal_ves or 0).replace(',', 'X').replace('.', ',').replace('X', '.') }}</td>
                     </tr>
                 {% endif %}
                 <tr>
-                    <td class="label">Método Cobro:</td>
-                    <td class="value">{{ metodo_mostrar }}</td>
+                    <td>Metodo Pago:</td>
+                    <td class="right">{{ venta.metodo_pago }}</td>
                 </tr>
-                <tr>
-                    <td class="label">Tasa aplicada:</td>
-                    <td class="value">{{ "%.2f"|format(tasa_mostrar or 0) }}</td>
-                </tr>
-                <tr>
-                    <td class="label">Método Pago:</td>
-                    <td class="value">{{ venta.metodo_pago }}</td>
-                </tr>
-                {% if venta.moneda_cobro == 'USD' %}
-                <tr>
-                    <td class="label"><span class="bold">Total en USD:</span></td>
-                    <td class="value">${{ "%.2f"|format(venta.total_cobro or 0) }}</td>
-                </tr>
-                {% else %}
-                <tr>
-                    <td class="label"><span class="bold">Total en VES:</span></td>
-                    <td class="value">Bs {{ "{:,.2f}".format(venta.total_cobro or 0).replace(',', '.') }}</td>
-                </tr>
-                {% endif %}
             </table>
 
             <div class="separator-doble"></div>
 
-            <!-- Mensaje y URL -->
-            <div class="footer-mensaje bold">{{ config_ticket.mensaje_agradecimiento }}</div>
-            <div class="footer-url">{{ config_ticket.url_web }}</div>
-            <div style="height: 10px;"></div>
+            <!-- PIE DE PÁGINA -->
+            <div class="center" style="margin-top: 4px;">{{ config_ticket.mensaje_agradecimiento }}</div>
+            {% if config_ticket.url_web %}
+                <div class="center" style="font-size: 9px;">{{ config_ticket.url_web }}</div>
+            {% endif %}
         </div>
     </div>
 
-    <!-- 🔥 BLOQUE DE DEPURACIÓN (solo visible en pantalla) - Eliminado para versión final -->
-    <!--
-    <div class="debug-info">
-        <strong>🔍 Depuración del ticket:</strong><br>
-        ¿Cliente existe? {{ 'Sí' if cliente else 'No' }}<br>
-        ¿Dirección del cliente? {{ cliente.direccion if cliente and cliente.direccion else '(vacía o nula)' }}<br>
-        Configuración mostrar_direccion_cliente: {{ config_ticket.mostrar_direccion_cliente }}<br>
-        (Esta información solo se muestra en pantalla, no en impresión)
-    </div>
-    -->
-
-    <!-- Botones de control (no se imprimen) -->
+    <!-- CONTROLES DE PANTALLA -->
     <div class="no-imprimir">
         <button onclick="window.print()">🖨️ Imprimir</button>
         <button class="btn-cerrar" onclick="window.close()">✖ Cerrar</button>
