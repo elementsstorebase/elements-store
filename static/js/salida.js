@@ -825,7 +825,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // ============================================================
-    // 🔥 NUEVA FUNCIÓN PARA OBTENER DATOS DEL CLIENTE
+    // 🔥 FUNCIÓN PARA OBTENER DATOS DEL CLIENTE
     // ============================================================
     function obtenerDatosCliente() {
         return {
@@ -838,7 +838,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // ============================================================
-    // 🔥 NUEVA FUNCIÓN PARA ABRIR EL TICKET HTML (window.print)
+    // 🔥 FUNCIÓN MEJORADA PARA ABRIR EL TICKET HTML (window.print)
     // ============================================================
     function imprimirNotaEntrega(ventaId) {
         if (!ventaId) {
@@ -846,8 +846,24 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         const url = `/ventas/ticket/${ventaId}`;
-        // Abrir en una nueva ventana/pestaña (se puede ajustar el tamaño)
-        window.open(url, '_blank', 'width=500,height=700,scrollbars=yes');
+        // Abrir en una nueva ventana con tamaño ajustado al ancho del ticket (58mm ~ 400px)
+        // y sin barras de herramientas para evitar distorsiones.
+        const ventana = window.open(
+            url,
+            '_blank',
+            'width=400,height=600,location=no,menubar=no,toolbar=no,scrollbars=no,resizable=yes'
+        );
+        if (ventana) {
+            // Enfoque en la nueva ventana
+            ventana.focus();
+            // Pequeño recordatorio para el usuario (se muestra en consola y en la interfaz si se desea)
+            console.info('📄 Para obtener la mejor calidad, en el diálogo de impresión:');
+            console.info('   - Desactive "Encabezados y pies de página"');
+            console.info('   - Ajuste los márgenes a "Ninguno"');
+        } else {
+            // Si el navegador bloquea la ventana emergente, redirigir a la misma página
+            window.location.href = url;
+        }
     }
 
     // ---------- PROCESAR VENTA (FUNCIÓN REUTILIZABLE) ----------
@@ -951,7 +967,6 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .then(res => {
                 alert(res.mensaje || '✅ Venta registrada exitosamente');
-                // 🔥 CAMBIO: Abrir ticket HTML después de la venta
                 imprimirNotaEntrega(res.venta_id);
                 limpiarVenta();
             })
@@ -1062,7 +1077,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 btnGenerarTicket.textContent = 'Descargando ticket...';
                 // Descargar PNG
                 window.location.href = `/api/generar-ticket/${ventaId}`;
-                // 🔥 CAMBIO: Abrir ticket HTML también (opcional, pero útil)
                 imprimirNotaEntrega(ventaId);
                 setTimeout(() => {
                     limpiarVenta();
@@ -1192,7 +1206,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     numeroTicket = String(res.numero_ticket).padStart(5, '0');
                 }
                 alert('✅ Venta registrada. El ticket físico se ha enviado a la impresora.');
-                // 🔥 CAMBIO: Abrir ticket HTML (el backend ya imprimió, pero mostramos la vista)
                 imprimirNotaEntrega(res.venta_id);
                 limpiarVenta();
                 btnGenerarTicketFisico.textContent = 'Generar Ticket Físico';
@@ -1292,7 +1305,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     numeroTicket = String(res.numero_ticket).padStart(5, '0');
                 }
                 alert('✅ Venta registrada (sin impresión física porque no hay impresora configurada).');
-                // 🔥 CAMBIO: Abrir ticket HTML igualmente
                 imprimirNotaEntrega(res.venta_id);
                 limpiarVenta();
                 btnGenerarTicketFisico.textContent = 'Generar Ticket Físico';

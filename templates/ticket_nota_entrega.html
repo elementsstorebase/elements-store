@@ -137,65 +137,156 @@
             background: #4b5563;
         }
 
-        /* ============================================
-           ESTILOS PARA IMPRESIÓN (OPTIMIZADOS)
-           ============================================ */
+        /* ================================================================
+           ESTILOS PARA IMPRESIÓN (OPTIMIZADOS PARA DENSIDAD Y ALINEACIÓN)
+           ================================================================ */
         @media print {
+            /* Elimina márgenes de página y fija ancho a 58mm */
             @page {
                 margin: 0;
                 size: 58mm auto;
             }
+
+            /* Fuerza colores exactos y desactiva suavizado en todo el documento */
+            * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+
             body {
-                background: white;
-                padding: 0;
-                margin: 0;
-                display: block;
+                background: white !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                display: block !important;
+                -webkit-font-smoothing: none !important;
+                -moz-osx-font-smoothing: grayscale !important;
             }
+
             .ticket-container {
-                max-width: 100%;
-                border: none;
-                border-radius: 0;
-                box-shadow: none;
-                padding: 4px 2px;
-                margin: 0;
+                width: 58mm !important;
+                max-width: 58mm !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                border: none !important;
+                border-radius: 0 !important;
+                box-shadow: none !important;
+                background: white !important;
             }
+
+            /* --- Texto del ticket: negro puro, negrita, tamaño compacto --- */
             .ticket {
-                font-size: 9px;
-                line-height: 1.2;
+                font-size: 10px !important;
+                line-height: 1.1 !important;
+                background: white !important;
+                color: #000000 !important;
+                font-weight: bold !important;
+                padding: 0 !important;
             }
-            .no-imprimir {
-                display: none !important;
+
+            .ticket * {
+                color: #000000 !important;
+                font-weight: bold !important;
             }
-            .debug-info {
-                display: none !important;
+
+            /* Ajuste del nombre de la tienda (más grande pero dentro del ancho) */
+            .ticket .center.bold[style*="font-size: 16px;"] {
+                font-size: 12px !important;
             }
+
+            /* --- Líneas de productos: columnas fijas para alineación exacta --- */
             .ticket .producto-linea {
-                font-size: 8px;
+                display: flex !important;
+                justify-content: space-between !important;
+                font-size: 9px !important;
+                padding: 0 !important;
+                margin: 0 !important;
             }
+
+            .ticket .producto-nombre {
+                flex: 0 0 50% !important;
+                max-width: 50% !important;
+                padding-right: 2px !important;
+                white-space: nowrap !important;
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
+            }
+
+            .ticket .producto-cantidad {
+                flex: 0 0 15% !important;
+                max-width: 15% !important;
+                text-align: center !important;
+            }
+
+            .ticket .producto-precio {
+                flex: 0 0 17% !important;
+                max-width: 17% !important;
+                text-align: right !important;
+            }
+
+            .ticket .producto-total {
+                flex: 0 0 18% !important;
+                max-width: 18% !important;
+                text-align: right !important;
+            }
+
+            /* --- Encabezado de columnas (Producto, Cant, Precio, Total) --- */
+            /* Se selecciona el div con el estilo inline que contiene los encabezados */
+            .ticket > div[style*="display: flex; justify-content: space-between;"] {
+                font-size: 9px !important;
+                font-weight: bold !important;
+            }
+
+            .ticket > div[style*="display: flex; justify-content: space-between;"] span {
+                flex: 0 0 auto !important;
+                font-weight: bold !important;
+                font-size: 9px !important;
+            }
+
+            .ticket > div[style*="display: flex; justify-content: space-between;"] span:nth-child(1) {
+                flex: 0 0 50% !important;
+                text-align: left !important;
+            }
+            .ticket > div[style*="display: flex; justify-content: space-between;"] span:nth-child(2) {
+                flex: 0 0 15% !important;
+                text-align: center !important;
+            }
+            .ticket > div[style*="display: flex; justify-content: space-between;"] span:nth-child(3) {
+                flex: 0 0 17% !important;
+                text-align: right !important;
+            }
+            .ticket > div[style*="display: flex; justify-content: space-between;"] span:nth-child(4) {
+                flex: 0 0 18% !important;
+                text-align: right !important;
+            }
+
+            /* --- Separadores más finos pero nítidos --- */
             .ticket .separator-doble {
-                border-top: 1.5px solid #000;
-                margin: 2px 0;
+                border-top: 1.5px solid #000 !important;
+                margin: 2px 0 !important;
             }
             .ticket .separator-simple {
-                border-top: 0.5px solid #000;
-                margin: 2px 0;
+                border-top: 0.5px solid #000 !important;
+                margin: 2px 0 !important;
             }
+
+            /* --- Tabla de totales --- */
             .ticket .totales td {
-                padding: 1px 0;
+                padding: 1px 0 !important;
+                font-size: 9px !important;
             }
+
+            /* --- Pie de página --- */
             .ticket .footer-mensaje {
-                font-size: 9px;
-                margin-top: 4px;
+                font-size: 9px !important;
+                margin-top: 4px !important;
             }
             .ticket .footer-url {
-                font-size: 8px;
+                font-size: 8px !important;
             }
-            body, .ticket-container, .ticket {
-                background: white !important;
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
-            }
-            .no-print {
+
+            /* Ocultar elementos de control y depuración */
+            .no-imprimir,
+            .debug-info {
                 display: none !important;
             }
         }
