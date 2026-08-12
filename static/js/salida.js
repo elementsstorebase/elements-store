@@ -1467,23 +1467,21 @@ document.addEventListener('DOMContentLoaded', function() {
     }, 60000);
 
     // ==================================================================
-    //  INTEGRACIÓN CON IMPRESIÓN POR WEB SERIAL
+    //  INTEGRACIÓN CON IMPRESIÓN POR WEBUSB
     // ==================================================================
 
     // Verificar compatibilidad y agregar botón dinámicamente
-    function agregarBotonSerial() {
-        if (!('serial' in navigator)) return;
+    function agregarBotonUSB() {
+        if (!('usb' in navigator)) return;
 
-        // Buscar el contenedor de botones (donde está btn-generar-ticket-fisico)
         const btnFisico = document.getElementById('btn-generar-ticket-fisico');
         if (!btnFisico) return;
 
-        // Evitar duplicados
-        if (document.getElementById('btn-imprimir-serial')) return;
+        if (document.getElementById('btn-imprimir-usb')) return;
 
         const btn = document.createElement('button');
-        btn.id = 'btn-imprimir-serial';
-        btn.innerHTML = '🖨️ Imprimir por USB (Chrome/Edge)';
+        btn.id = 'btn-imprimir-usb';
+        btn.innerHTML = '🖨️ Imprimir por USB (WebUSB)';
         btn.className = 'btn-primary w-full mt-2 text-sm';
         btn.style.background = '#0d9488';
         btn.style.color = 'white';
@@ -1502,14 +1500,12 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         btn.addEventListener('click', function() {
-            // Recolectar datos actuales del carrito y cliente
             const clienteData = obtenerDatosCliente();
             const totalUsd = carrito.reduce((sum, item) => {
                 const precio = getPrecioConDescuento(item);
                 return sum + (precio * item.cantidad);
             }, 0);
 
-            // Obtener subtotal VES (usando la tasa seleccionada)
             let subtotalVes = 0;
             switch(tasaSeleccionada) {
                 case 'usd':
@@ -1535,10 +1531,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     subtotalVes = totalUsd * tasaUsd;
             }
 
-            // Obtener el número de ticket actual
             const numTicket = numeroTicket || '00000';
-
-            // Fecha actual
             const ahora = new Date();
             const fechaStr = ahora.toLocaleString('es-VE', {
                 day: '2-digit',
@@ -1549,7 +1542,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 second: '2-digit'
             });
 
-            const datosSerial = {
+            const datosUSB = {
                 carrito: carrito,
                 cliente: clienteData,
                 totalUsd: totalUsd,
@@ -1562,18 +1555,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 ventaId: null
             };
 
-            // Llamar a la función global definida en impresion_serial.js
-            if (typeof window.imprimirTicketSerial === 'function') {
-                window.imprimirTicketSerial(datosSerial);
+            if (typeof window.imprimirTicketUSB === 'function') {
+                window.imprimirTicketUSB(datosUSB);
             } else {
-                alert('❌ Módulo de impresión serial no cargado. Verifica que el archivo impresion_serial.js esté incluido.');
+                alert('❌ Módulo de impresión USB no cargado. Verifica que el archivo impresion_usb.js esté incluido.');
             }
         });
 
-        // Insertar el botón después del botón físico
         btnFisico.parentNode.insertBefore(btn, btnFisico.nextSibling);
     }
 
-    // Llamar después de la inicialización
-    setTimeout(agregarBotonSerial, 500);
+    setTimeout(agregarBotonUSB, 500);
 });
