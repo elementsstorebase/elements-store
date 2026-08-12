@@ -2544,6 +2544,12 @@ def registrar_venta():
     # Determinar mostrar_url_web (si existe URL y no está vacía)
     mostrar_url_web = bool(config_ticket.get('url_web', '').strip())
 
+    # ============================================================
+    # 🔥 CORRECCIÓN FINAL: AGREGAR porcentaje_iva Y monto_iva_ves AL OBJETO venta
+    # ============================================================
+    # Calcular el monto del IVA en VES usando el subtotal y el porcentaje
+    monto_iva_ves = float(venta.subtotal_ves or 0) * (config_ticket.get('porcentaje_iva', 0) / 100)
+
     # Respuesta final
     response_data = {
         'success': True,
@@ -2555,7 +2561,10 @@ def registrar_venta():
             'subtotal_ves': float(venta.subtotal_ves or 0),
             'total_ves': float(venta.total_ves or 0),
             'metodo_pago': venta.metodo_pago,
-            'metodo_cobro': venta.metodo_cobro
+            'metodo_cobro': venta.metodo_cobro,
+            # 🔥 NUEVOS CAMPOS PARA EL DESGLOSE DE IVA
+            'porcentaje_iva': config_ticket.get('porcentaje_iva', 0),
+            'monto_iva_ves': monto_iva_ves
         },
         'detalles': detalles_respuesta,
         'cliente': cliente_respuesta,
