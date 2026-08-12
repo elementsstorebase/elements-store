@@ -1,11 +1,11 @@
 /**
- * impresion_serial.js
+ * impresion_usb.js
  * 
- * Módulo para imprimir tickets mediante Web Serial API (ESC/POS)
- * Compatible con Chrome/Edge 89+, Firefox 151+, Opera 75+
+ * Módulo para imprimir tickets mediante WebUSB API (ESC/POS)
+ * Compatible con Chrome/Edge 89+
  * 
  * Uso:
- *   window.imprimirTicketSerial(datos)
+ *   window.imprimirTicketUSB(datos)
  */
 
 (function() {
@@ -13,8 +13,6 @@
 
     // -------------------- CONFIGURACIÓN DE IMPRESORA --------------------
     const CONFIG = {
-        // Velocidad de baudios (ajústala según tu impresora: 9600, 19200, 115200)
-        baudRate: 9600,
         // Caracteres por línea (ajustar según ancho: 32 para 58mm, 42 para 80mm)
         columnas: 32,
         // Códigos ESC/POS
@@ -93,13 +91,13 @@
 
         lines.push(separador(col, '-'));
 
-        // --- Totales (alineación izquierda/derecha) ---
+        // --- Totales ---
         lines.push(CONFIG.ESC + 'E\x01');
         lines.push(alinearIzquierdaDerecha('TOTAL USD:', `$${totalUsd.toFixed(2)}`, col));
         lines.push(CONFIG.ESC + 'E\x00');
         lines.push(separador(col, '-'));
 
-        // --- Subtotales en VES (con formato venezolano) ---
+        // --- Subtotales en VES ---
         lines.push(alinearIzquierdaDerecha('Tasa BCV:', `Bs ${tasa.toFixed(2)}`, col));
         const subtotalVesStr = formatearNumeroVES(subtotalVes);
         lines.push(alinearIzquierdaDerecha('SUBTOTAL VES:', `Bs ${subtotalVesStr}`, col));
@@ -121,17 +119,16 @@
         lines.push(separador(col, '-'));
 
         // --- Pie de página (centrado) ---
-        lines.push(CONFIG.ESC + 'a\x01');                // Centrar
+        lines.push(CONFIG.ESC + 'a\x01');
         lines.push(configTicket.mensaje || '¡Gracias por su compra!');
         if (configTicket.url) {
             lines.push(configTicket.url);
         }
 
         // --- Avanzar y cortar papel ---
-        lines.push(CONFIG.ESC + 'd\x03');                // 3 líneas en blanco
-        lines.push(CONFIG.GS + 'V\x00');                 // Corte total
+        lines.push(CONFIG.ESC + 'd\x03');
+        lines.push(CONFIG.GS + 'V\x00');
 
-        // Unir con saltos de línea y codificar
         const text = lines.join(CONFIG.LF);
         return encoder.encode(text);
     }
@@ -156,7 +153,6 @@
     }
 
     function formatearNumeroVES(valor) {
-        // Reemplazar separadores: punto para miles, coma para decimales
         return valor.toFixed(2)
             .replace(/\B(?=(\d{3})+(?!\d))/g, '.')
             .replace('.', 'X')
@@ -164,36 +160,49 @@
             .replace('X', ',');
     }
 
-    // -------------------- ENVÍO POR WEB SERIAL --------------------
-    async function enviarPorSerial(buffer) {
+    // -------------------- ENVÍO POR WEBUSB --------------------
+    async function enviarPorUSB(buffer) {
         try {
-            // Solicitar puerto
-            const port = await navigator.serial.requestPort();
-            // Abrir conexión
-            await port.open({ baudRate: CONFIG.baudRate });
-            const writer = port.writable.getWriter();
-            await writer.write(buffer);
-            writer.releaseLock();
-            await port.close();
+            // Solicitar dispositivo USB (filtro vacío para mostrar todos)
+            const device = await navigator.usb.requestDevice({ filters: [] });
+            await device.open();
+
+            // Si el dispositivo tiene múltiples configuraciones, seleccionar la #1
+            if (device.configuration === null) {
+                await device.selectConfiguration(1);
+            }
+
+            // Reclamar el primer endpoint OUT (generalmente el 2 o 3)
+            const endpointOut = device.configuration.interfaces[0]?.alternate?.endpoints?.find(e => e.direction === 'out');
+            if (!endpointOut) {
+                throw new Error('No se encontró un endpoint OUT en el dispositivo.');
+            }
+            await device.claimInterface(device.configuration.interfaces[0].interfaceNumber);
+
+            // Escribir el buffer en el endpoint OUT
+            const result = await device.transferOut(endpointOut.endpointNumber, buffer);
+            if (result.status !== 'ok') {
+                throw new Error('Error al transferir datos: ' + result.status);
+            }
+
+            await device.close();
             return { success: true };
         } catch (err) {
-            console.error('Error en Web Serial:', err);
+            console.error('Error en WebUSB:', err);
             throw err;
         }
     }
 
     // -------------------- FUNCIÓN PRINCIPAL EXPUESTA --------------------
-    window.imprimirTicketSerial = async function(datos) {
-        // Validar que exista el carrito
+    window.imprimirTicketUSB = async function(datos) {
         if (!datos.carrito || datos.carrito.length === 0) {
             alert('No hay productos en el carrito para imprimir');
             return;
         }
 
         // Verificar compatibilidad
-        if (!('serial' in navigator)) {
-            alert('❌ Tu navegador no soporta Web Serial API.\nUsa Chrome/Edge 89+, Firefox 151+ u Opera 75+.\n\nSe usará la impresión HTML alternativa.');
-            // Llamar a la impresión HTML como fallback
+        if (!('usb' in navigator)) {
+            alert('❌ Tu navegador no soporta WebUSB.\nUsa Chrome/Edge 89+.\n\nSe usará la impresión HTML alternativa.');
             if (window.imprimirNotaEntrega && datos.ventaId) {
                 window.imprimirNotaEntrega(datos.ventaId);
             }
@@ -201,16 +210,13 @@
         }
 
         try {
-            // Generar buffer ESC/POS
             const buffer = generarBufferTicket(datos);
-            // Enviar a la impresora
-            const resultado = await enviarPorSerial(buffer);
+            const resultado = await enviarPorUSB(buffer);
             if (resultado.success) {
                 alert('✅ Ticket enviado a la impresora por USB.');
             }
         } catch (err) {
             alert('❌ Error al imprimir: ' + err.message);
-            // Si falla, ofrecer impresión HTML como alternativa
             if (confirm('Falló la impresión por USB. ¿Desea intentar con la impresión HTML?')) {
                 if (window.imprimirNotaEntrega && datos.ventaId) {
                     window.imprimirNotaEntrega(datos.ventaId);
