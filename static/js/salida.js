@@ -1465,4 +1465,115 @@ document.addEventListener('DOMContentLoaded', function() {
     setInterval(() => {
         obtenerTasas();
     }, 60000);
+
+    // ==================================================================
+    //  INTEGRACIÓN CON IMPRESIÓN POR WEB SERIAL
+    // ==================================================================
+
+    // Verificar compatibilidad y agregar botón dinámicamente
+    function agregarBotonSerial() {
+        if (!('serial' in navigator)) return;
+
+        // Buscar el contenedor de botones (donde está btn-generar-ticket-fisico)
+        const btnFisico = document.getElementById('btn-generar-ticket-fisico');
+        if (!btnFisico) return;
+
+        // Evitar duplicados
+        if (document.getElementById('btn-imprimir-serial')) return;
+
+        const btn = document.createElement('button');
+        btn.id = 'btn-imprimir-serial';
+        btn.innerHTML = '🖨️ Imprimir por USB (Chrome/Edge)';
+        btn.className = 'btn-primary w-full mt-2 text-sm';
+        btn.style.background = '#0d9488';
+        btn.style.color = 'white';
+        btn.style.padding = '10px 24px';
+        btn.style.border = 'none';
+        btn.style.borderRadius = '4px';
+        btn.style.cursor = 'pointer';
+        btn.style.fontSize = '16px';
+        btn.style.transition = 'background 0.2s';
+
+        btn.addEventListener('mouseenter', function() {
+            this.style.background = '#0f766e';
+        });
+        btn.addEventListener('mouseleave', function() {
+            this.style.background = '#0d9488';
+        });
+
+        btn.addEventListener('click', function() {
+            // Recolectar datos actuales del carrito y cliente
+            const clienteData = obtenerDatosCliente();
+            const totalUsd = carrito.reduce((sum, item) => {
+                const precio = getPrecioConDescuento(item);
+                return sum + (precio * item.cantidad);
+            }, 0);
+
+            // Obtener subtotal VES (usando la tasa seleccionada)
+            let subtotalVes = 0;
+            switch(tasaSeleccionada) {
+                case 'usd':
+                    subtotalVes = totalUsd * tasaUsd;
+                    break;
+                case 'bcv_usd':
+                    subtotalVes = totalUsd * tasaUsd;
+                    break;
+                case 'bcv_eur':
+                    subtotalVes = totalUsd * tasaEur;
+                    break;
+                case 'personalizada':
+                    subtotalVes = totalUsd * tasaPersonalizada;
+                    break;
+                case 'bs_personalizado':
+                    subtotalVes = parseMontoVES(bsPersonalizadoInput.value) || 0;
+                    break;
+                case 'usd_personalizado':
+                    const montoUsd = parseFloat(usdPersonalizadoInput.value) || 0;
+                    subtotalVes = montoUsd * tasaUsd;
+                    break;
+                default:
+                    subtotalVes = totalUsd * tasaUsd;
+            }
+
+            // Obtener el número de ticket actual
+            const numTicket = numeroTicket || '00000';
+
+            // Fecha actual
+            const ahora = new Date();
+            const fechaStr = ahora.toLocaleString('es-VE', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+
+            const datosSerial = {
+                carrito: carrito,
+                cliente: clienteData,
+                totalUsd: totalUsd,
+                subtotalVes: subtotalVes,
+                metodoPago: metodoPago.options[metodoPago.selectedIndex].text,
+                tasa: tasaUsd,
+                configTicket: configTicket,
+                numeroTicket: numTicket,
+                fecha: fechaStr,
+                ventaId: null
+            };
+
+            // Llamar a la función global definida en impresion_serial.js
+            if (typeof window.imprimirTicketSerial === 'function') {
+                window.imprimirTicketSerial(datosSerial);
+            } else {
+                alert('❌ Módulo de impresión serial no cargado. Verifica que el archivo impresion_serial.js esté incluido.');
+            }
+        });
+
+        // Insertar el botón después del botón físico
+        btnFisico.parentNode.insertBefore(btn, btnFisico.nextSibling);
+    }
+
+    // Llamar después de la inicialización
+    setTimeout(agregarBotonSerial, 500);
 });
