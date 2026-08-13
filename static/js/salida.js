@@ -668,7 +668,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // ============================================================
-    // 🔥 FUNCIÓN ACTUALIZAR TICKET (CORREGIDA - SIN DAÑAR IVA)
+    // 🔥 FUNCIÓN ACTUALIZAR TICKET (CORREGIDA DEFINITIVA)
     // ============================================================
     function actualizarTicket() {
         controlarVisibilidadSubtotal();
@@ -744,9 +744,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 tasaAplicada = tasaPersonalizada;
                 break;
             case 'bs_personalizado':
-                // 🔥 CORRECCIÓN: usar el monto ingresado como base imponible (sin IVA)
-                subtotalVes = parseMontoVES(bsPersonalizadoInput.value) || 0;
-                totalMostrar = subtotalVes; // El IVA se muestra aparte
+                // El total en Bs = subtotalUsd * tasaUsd (con descuentos aplicados)
+                subtotalVes = subtotalUsd * tasaUsd;
+                totalMostrar = subtotalUsd * tasaUsd;
                 simbolo = 'Bs ';
                 tasaAplicada = tasaUsd;
                 break;
@@ -809,7 +809,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             subtotalUsdDisplay = Number(subtotalUsdDisplay.toFixed(2));
 
-            // IVA en USD (para mostrar en el ticket, opcional)
+            // IVA
             const ivaPorcentaje = configTicket.ivaPorcentaje || 0;
             const ivaMonto = Number((subtotalUsdDisplay * (ivaPorcentaje / 100)).toFixed(2));
             const totalConIva = Number((subtotalUsdDisplay + ivaMonto).toFixed(2));
@@ -997,9 +997,19 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         if (tasaSeleccionada === 'bs_personalizado') {
-            // 🔥 CORRECCIÓN: enviar el monto ingresado (sin IVA)
+            // Calcular total en Bs con descuentos aplicados
+            let precioBaseUsd = null;
             const montoBs = parseMontoVES(bsPersonalizadoInput.value) || 0;
-            data.total_cobro = montoBs;
+            if (montoBs > 0 && tasaUsd > 0) {
+                precioBaseUsd = montoBs / tasaUsd;
+            }
+            let totalUsd = 0;
+            carrito.forEach(item => {
+                const base = precioBaseUsd !== null ? precioBaseUsd : item.precio;
+                const precioConDesc = base * (1 - (item.descuento || 0) / 100);
+                totalUsd += precioConDesc * item.cantidad;
+            });
+            data.total_cobro = totalUsd * tasaUsd;
         } else if (tasaSeleccionada === 'usd_personalizado') {
             let total = 0;
             carrito.forEach(item => {
@@ -1170,9 +1180,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 };
 
                 if (tasaSeleccionada === 'bs_personalizado') {
-                    // 🔥 CORRECCIÓN: usar el monto ingresado
+                    let precioBaseUsd = null;
                     const montoBs = parseMontoVES(bsPersonalizadoInput.value) || 0;
-                    data.total_cobro = montoBs;
+                    if (montoBs > 0 && tasaUsd > 0) {
+                        precioBaseUsd = montoBs / tasaUsd;
+                    }
+                    let totalUsd = 0;
+                    carrito.forEach(item => {
+                        const base = precioBaseUsd !== null ? precioBaseUsd : item.precio;
+                        const precioConDesc = base * (1 - (item.descuento || 0) / 100);
+                        totalUsd += precioConDesc * item.cantidad;
+                    });
+                    data.total_cobro = totalUsd * tasaUsd;
                 } else if (tasaSeleccionada === 'usd_personalizado') {
                     let total = 0;
                     carrito.forEach(item => {
@@ -1308,9 +1327,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 };
 
                 if (tasaSeleccionada === 'bs_personalizado') {
-                    // 🔥 CORRECCIÓN: usar el monto ingresado
+                    let precioBaseUsd = null;
                     const montoBs = parseMontoVES(bsPersonalizadoInput.value) || 0;
-                    data.total_cobro = montoBs;
+                    if (montoBs > 0 && tasaUsd > 0) {
+                        precioBaseUsd = montoBs / tasaUsd;
+                    }
+                    let totalUsd = 0;
+                    carrito.forEach(item => {
+                        const base = precioBaseUsd !== null ? precioBaseUsd : item.precio;
+                        const precioConDesc = base * (1 - (item.descuento || 0) / 100);
+                        totalUsd += precioConDesc * item.cantidad;
+                    });
+                    data.total_cobro = totalUsd * tasaUsd;
                 } else if (tasaSeleccionada === 'usd_personalizado') {
                     let total = 0;
                     carrito.forEach(item => {
@@ -1414,9 +1442,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 };
 
                 if (tasaSeleccionada === 'bs_personalizado') {
-                    // 🔥 CORRECCIÓN: usar el monto ingresado
+                    let precioBaseUsd = null;
                     const montoBs = parseMontoVES(bsPersonalizadoInput.value) || 0;
-                    data.total_cobro = montoBs;
+                    if (montoBs > 0 && tasaUsd > 0) {
+                        precioBaseUsd = montoBs / tasaUsd;
+                    }
+                    let totalUsd = 0;
+                    carrito.forEach(item => {
+                        const base = precioBaseUsd !== null ? precioBaseUsd : item.precio;
+                        const precioConDesc = base * (1 - (item.descuento || 0) / 100);
+                        totalUsd += precioConDesc * item.cantidad;
+                    });
+                    data.total_cobro = totalUsd * tasaUsd;
                 } else if (tasaSeleccionada === 'usd_personalizado') {
                     let total = 0;
                     carrito.forEach(item => {
@@ -1733,9 +1770,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 };
 
                 if (tasaSeleccionada === 'bs_personalizado') {
-                    // 🔥 CORRECCIÓN: usar el monto ingresado
+                    let precioBaseUsd = null;
                     const montoBs = parseMontoVES(bsPersonalizadoInput.value) || 0;
-                    data.total_cobro = montoBs;
+                    if (montoBs > 0 && tasaUsd > 0) {
+                        precioBaseUsd = montoBs / tasaUsd;
+                    }
+                    let totalUsd = 0;
+                    carrito.forEach(item => {
+                        const base = precioBaseUsd !== null ? precioBaseUsd : item.precio;
+                        const precioConDesc = base * (1 - (item.descuento || 0) / 100);
+                        totalUsd += precioConDesc * item.cantidad;
+                    });
+                    data.total_cobro = totalUsd * tasaUsd;
                 } else if (tasaSeleccionada === 'usd_personalizado') {
                     let total = 0;
                     carrito.forEach(item => {
