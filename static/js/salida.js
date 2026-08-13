@@ -470,7 +470,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <input type="checkbox" class="oferta-checkbox" data-index="${index}" ${item.ofertaActiva ? 'checked' : ''}>
                 </td>
                 <td class="text-center">
-                    <input type="number" class="descuento-input w-16 input-field text-center" value="${item.descuento}" min="0" max="100" step="0.5" data-index="${index}" ${item.ofertaActiva ? '' : 'disabled'}>
+                    <input type="text" inputmode="numeric" class="descuento-input w-16 input-field text-center" value="${item.descuento}" data-index="${index}" ${item.ofertaActiva ? '' : 'disabled'}>
                 </td>
                 <td class="text-right">$${formatearMonto(subtotal)}</td>
                 <td class="text-right">
