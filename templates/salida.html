@@ -383,11 +383,11 @@
             const totalVes = venta.total_ves || 0;
             lines.push(alinearIzquierdaDerecha('SUBTOTAL VES:', `Bs ${formatearNumeroVES(subtotalVes)}`, col));
 
-            // DESGLOSE DINÁMICO DE IVA (solo si > 0%)
-            if (configTicket.ivaPorcentaje > 0) {
-                const ivaMonto = subtotalVes * (configTicket.ivaPorcentaje / 100);
+            // 🔥 CORREGIDO: usar porcentaje_iva (nombre enviado por el servidor)
+            if (configTicket.porcentaje_iva > 0) {
+                const ivaMonto = subtotalVes * (configTicket.porcentaje_iva / 100);
                 const totalConIva = subtotalVes + ivaMonto;
-                lines.push(alinearIzquierdaDerecha(`IVA (${configTicket.ivaPorcentaje}%):`, `Bs ${formatearNumeroVES(ivaMonto)}`, col));
+                lines.push(alinearIzquierdaDerecha(`IVA (${configTicket.porcentaje_iva}%):`, `Bs ${formatearNumeroVES(ivaMonto)}`, col));
                 lines.push(CONFIG.ESC + 'E\x01');
                 lines.push(alinearIzquierdaDerecha('TOTAL VES:', `Bs ${formatearNumeroVES(totalConIva)}`, col));
                 lines.push(CONFIG.ESC + 'E\x00');
