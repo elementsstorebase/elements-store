@@ -668,7 +668,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // ============================================================
-    // 🔥 FUNCIÓN ACTUALIZAR TICKET (CORREGIDA DEFINITIVA)
+    // 🔥 FUNCIÓN ACTUALIZAR TICKET (CORREGIDA - cambio mínimo)
     // ============================================================
     function actualizarTicket() {
         controlarVisibilidadSubtotal();
@@ -744,9 +744,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 tasaAplicada = tasaPersonalizada;
                 break;
             case 'bs_personalizado':
-                // El total en Bs = subtotalUsd * tasaUsd (con descuentos aplicados)
-                subtotalVes = subtotalUsd * tasaUsd;
-                totalMostrar = subtotalUsd * tasaUsd;
+                // 🔥 CORRECCIÓN: usar el monto ingresado por el usuario (no recalcular)
+                const montoIngresado = parseMontoVES(bsPersonalizadoInput.value) || 0;
+                subtotalVes = montoIngresado;
+                totalMostrar = montoIngresado;  // El IVA se muestra aparte
                 simbolo = 'Bs ';
                 tasaAplicada = tasaUsd;
                 break;
