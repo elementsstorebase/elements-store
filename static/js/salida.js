@@ -668,7 +668,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // ============================================================
-    // 🔥 FUNCIÓN ACTUALIZAR TICKET (CORREGIDA PARA BS PERSONALIZADO)
+    // 🔥 FUNCIÓN ACTUALIZAR TICKET (CORREGIDA - SIN DAÑAR IVA)
     // ============================================================
     function actualizarTicket() {
         controlarVisibilidadSubtotal();
@@ -744,16 +744,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 tasaAplicada = tasaPersonalizada;
                 break;
             case 'bs_personalizado':
-                // 🔥 CORRECCIÓN: usar el monto ingresado directamente
-                const montoBsIngresado = parseMontoVES(bsPersonalizadoInput.value) || 0;
-                subtotalVes = montoBsIngresado;
-                const ivaPorcentaje = configTicket.ivaPorcentaje || 0;
-                if (ivaPorcentaje > 0) {
-                    const ivaMonto = subtotalVes * (ivaPorcentaje / 100);
-                    totalMostrar = subtotalVes + ivaMonto;
-                } else {
-                    totalMostrar = subtotalVes;
-                }
+                // 🔥 CORRECCIÓN: usar el monto ingresado como base imponible (sin IVA)
+                subtotalVes = parseMontoVES(bsPersonalizadoInput.value) || 0;
+                totalMostrar = subtotalVes; // El IVA se muestra aparte
                 simbolo = 'Bs ';
                 tasaAplicada = tasaUsd;
                 break;
@@ -816,7 +809,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
             subtotalUsdDisplay = Number(subtotalUsdDisplay.toFixed(2));
 
-            // IVA
+            // IVA en USD (para mostrar en el ticket, opcional)
             const ivaPorcentaje = configTicket.ivaPorcentaje || 0;
             const ivaMonto = Number((subtotalUsdDisplay * (ivaPorcentaje / 100)).toFixed(2));
             const totalConIva = Number((subtotalUsdDisplay + ivaMonto).toFixed(2));
@@ -1004,7 +997,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         if (tasaSeleccionada === 'bs_personalizado') {
-            // 🔥 CORRECCIÓN: enviar el monto ingresado directamente
+            // 🔥 CORRECCIÓN: enviar el monto ingresado (sin IVA)
             const montoBs = parseMontoVES(bsPersonalizadoInput.value) || 0;
             data.total_cobro = montoBs;
         } else if (tasaSeleccionada === 'usd_personalizado') {
