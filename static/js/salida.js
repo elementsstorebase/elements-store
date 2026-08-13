@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let numeroTicket = '00000';
     let factorAjuste = 1;
     let montoRecibido = 0;
+    let montoUsdPersonalizado = 0; // Nuevo: guarda el valor ingresado en USD personalizado
 
     // Configuración del ticket
     let configTicket = {
@@ -148,7 +149,10 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     usdPersonalizadoInput.addEventListener('input', function() {
+        // Guardar el valor ingresado como precio unitario
+        montoUsdPersonalizado = parseFloat(this.value) || 0;
         recalcularFactorAjuste();
+        renderCarrito();     // Actualiza el carrito con el nuevo precio
         actualizarTicket();
         actualizarEquivalenteVes();
         guardarEstado();
@@ -422,13 +426,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 factorAjuste = 1;
             }
         } else if (tasaSeleccionada === 'usd_personalizado') {
-            const montoUsd = parseFloat(usdPersonalizadoInput.value) || 0;
-            if (montoUsd > 0 && subtotalUsdOriginal > 0) {
-                subtotalUsdAjustado = montoUsd;
-                factorAjuste = subtotalUsdAjustado / subtotalUsdOriginal;
-            } else {
-                factorAjuste = 1;
-            }
+            // 🔥 NUEVO: el monto ingresado es el PRECIO UNITARIO, no el total
+            // No se usa factorAjuste; se maneja directamente en renderCarrito y actualizarTicket
+            factorAjuste = 1; // No aplicamos factor, usaremos el precio directo
         } else if (tasaSeleccionada === 'bcv_eur') {
             if (tasaUsd > 0 && tasaEur > 0) {
                 factorAjuste = tasaEur / tasaUsd;
@@ -451,10 +451,18 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         let total = 0;
+        // Obtener el precio unitario personalizado si está activo
+        const precioUnitarioPersonalizado = (tasaSeleccionada === 'usd_personalizado') ? montoUsdPersonalizado : null;
+
         carrito.forEach((item, index) => {
-            const precioBase = item.precio;
-            const precioConDesc = getPrecioConDescuento(item);
-            const precioEfectivo = precioConDesc * factorAjuste;
+            let precioBase = item.precio;
+            // Si hay precio unitario personalizado, reemplazar el precio base
+            if (precioUnitarioPersonalizado !== null && precioUnitarioPersonalizado > 0) {
+                precioBase = precioUnitarioPersonalizado;
+            }
+            // Aplicar descuento sobre el precio base (sea original o personalizado)
+            const precioConDesc = precioBase * (1 - (item.descuento || 0) / 100);
+            const precioEfectivo = precioConDesc; // No se aplica factor de ajuste porque ya es precio unitario
             const subtotal = precioEfectivo * item.cantidad;
             total += subtotal;
 
@@ -514,25 +522,27 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
 
-        // Descuento: input + blur
+        // Descuento: input (SOLO ACTUALIZA EL VALOR EN EL OBJETO, NO RENDERIZA)
         document.querySelectorAll('.descuento-input').forEach(input => {
             input.addEventListener('input', function() {
                 const index = parseInt(this.dataset.index);
                 let valor = parseFloat(this.value) || 0;
                 if (valor < 0) valor = 0;
                 if (valor > 100) valor = 100;
+                // Guardamos en el objeto, pero no renderizamos aún
                 carrito[index].descuento = valor;
                 if (valor > 0 && !carrito[index].ofertaActiva) {
                     carrito[index].ofertaActiva = true;
                     const chk = this.closest('tr').querySelector('.oferta-checkbox');
                     if (chk) chk.checked = true;
                 }
-                renderCarrito();
-                recalcularFactorAjuste();
+                // No llamamos a renderCarrito aquí para permitir escritura libre
+                // Solo actualizamos el ticket y guardamos estado
                 actualizarTicket();
                 guardarEstado();
             });
 
+            // En blur, renderizamos para actualizar totales
             input.addEventListener('blur', function() {
                 let valor = parseFloat(this.value) || 0;
                 if (valor < 0) valor = 0;
@@ -540,7 +550,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 this.value = valor;
                 const index = parseInt(this.dataset.index);
                 carrito[index].descuento = valor;
-                renderCarrito();
+                renderCarrito();    // Ahora renderiza con el valor definitivo
                 recalcularFactorAjuste();
                 actualizarTicket();
                 guardarEstado();
@@ -572,9 +582,15 @@ document.addEventListener('DOMContentLoaded', function() {
             usdPersonalizadoContainer.classList.remove('hidden');
             if (usdPersonalizadoInput.value.trim() !== '') {
                 formatearCampoUsd(usdPersonalizadoInput);
+                montoUsdPersonalizado = parseFloat(usdPersonalizadoInput.value) || 0;
+            } else {
+                montoUsdPersonalizado = 0;
             }
+        } else {
+            montoUsdPersonalizado = 0;
         }
         recalcularFactorAjuste();
+        renderCarrito();
         actualizarTicket();
         actualizarEquivalenteUsd();
         actualizarEquivalenteVes();
@@ -627,7 +643,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // ============================================================
-    // 🔥 FUNCIÓN ACTUALIZAR TICKET (CORREGIDA SIN insertBefore)
+    // 🔥 FUNCIÓN ACTUALIZAR TICKET (CORREGIDA CON PRECIO UNITARIO PERSONALIZADO)
     // ============================================================
     function actualizarTicket() {
         controlarVisibilidadSubtotal();
@@ -669,9 +685,16 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             let subtotalUsd = 0;
+            // Obtener precio unitario personalizado
+            const precioUnitarioPersonalizado = (tasaSeleccionada === 'usd_personalizado') ? montoUsdPersonalizado : null;
+
             carrito.forEach(item => {
-                const precioConDesc = getPrecioConDescuento(item);
-                const precioEfectivo = Number((precioConDesc * factorAjuste).toFixed(2));
+                let precioBase = item.precio;
+                if (precioUnitarioPersonalizado !== null && precioUnitarioPersonalizado > 0) {
+                    precioBase = precioUnitarioPersonalizado;
+                }
+                const precioConDesc = precioBase * (1 - (item.descuento || 0) / 100);
+                const precioEfectivo = Number(precioConDesc.toFixed(2));
                 const subtotalItem = Number((precioEfectivo * item.cantidad).toFixed(2));
                 subtotalUsd += subtotalItem;
 
@@ -779,9 +802,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     simbolo = 'Bs ';
                     break;
                 case 'usd_personalizado':
+                    // 🔥 NUEVO: el total es precio unitario * cantidad total
                     const montoUsd = parseFloat(usdPersonalizadoInput.value) || 0;
-                    subtotalVes = montoUsd * tasaUsd;
-                    totalMostrar = montoUsd;
+                    const cantidadTotal = carrito.reduce((sum, item) => sum + item.cantidad, 0);
+                    totalMostrar = montoUsd * cantidadTotal;
+                    subtotalVes = totalMostrar * tasaUsd;
                     simbolo = '$';
                     break;
             }
@@ -798,7 +823,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             // ============================================================
-            // 🔥 INSERTAR LÍNEA DEL IVA EN VES (CORREGIDO: SIN insertBefore)
+            // 🔥 INSERTAR LÍNEA DEL IVA EN VES
             // ============================================================
             const ivaPorcentaje = configTicket.ivaPorcentaje || 0;
             const esMetodoVes = tasaSeleccionada !== 'usd' && tasaSeleccionada !== 'usd_personalizado';
@@ -816,7 +841,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     ivaElement = document.createElement('div');
                     ivaElement.id = 'ticket-iva-ves';
                     ivaElement.className = 'flex justify-between';
-                    // Buscar el elemento que contiene "TOTAL" para insertar antes
                     const totalDivs = totalContainer.querySelectorAll('.flex.justify-between');
                     let lastTotalDiv = null;
                     for (let div of totalDivs) {
@@ -828,12 +852,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     if (lastTotalDiv && lastTotalDiv.parentNode === totalContainer) {
                         totalContainer.insertBefore(ivaElement, lastTotalDiv);
                     } else {
-                        // Si no se encuentra, agregar al final
                         totalContainer.appendChild(ivaElement);
                     }
                 }
                 
-                // Mostrar u ocultar según condiciones
                 if (ivaPorcentaje > 0 && esMetodoVes && subtotalVes > 0) {
                     ivaElement.style.display = 'flex';
                     const ivaVes = subtotalVes * (ivaPorcentaje / 100);
@@ -860,6 +882,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function limpiarVenta() {
         carrito = [];
         factorAjuste = 1;
+        montoUsdPersonalizado = 0;
         sessionStorage.removeItem('factorAjuste');
         renderCarrito();
         actualizarTicket();
@@ -949,7 +972,11 @@ document.addEventListener('DOMContentLoaded', function() {
         if (tasaSeleccionada === 'bs_personalizado') {
             data.total_cobro = parseMontoVES(bsPersonalizadoInput.value) || 0;
         } else if (tasaSeleccionada === 'usd_personalizado') {
-            data.total_cobro = parseFloat(usdPersonalizadoInput.value) || 0;
+            // Enviamos el precio unitario y la cantidad total? O el total calculado?
+            // Para el servidor, enviamos el total_cobro como el total calculado (precio unitario * cantidad total)
+            const montoUsd = parseFloat(usdPersonalizadoInput.value) || 0;
+            const cantidadTotal = carrito.reduce((sum, item) => sum + item.cantidad, 0);
+            data.total_cobro = montoUsd * cantidadTotal;
         }
 
         return fetch('/api/ventas', {
@@ -1114,7 +1141,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (tasaSeleccionada === 'bs_personalizado') {
                     data.total_cobro = parseMontoVES(bsPersonalizadoInput.value) || 0;
                 } else if (tasaSeleccionada === 'usd_personalizado') {
-                    data.total_cobro = parseFloat(usdPersonalizadoInput.value) || 0;
+                    const montoUsd = parseFloat(usdPersonalizadoInput.value) || 0;
+                    const cantidadTotal = carrito.reduce((sum, item) => sum + item.cantidad, 0);
+                    data.total_cobro = montoUsd * cantidadTotal;
                 }
 
                 return fetch('/api/ventas', {
@@ -1244,7 +1273,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (tasaSeleccionada === 'bs_personalizado') {
                     data.total_cobro = parseMontoVES(bsPersonalizadoInput.value) || 0;
                 } else if (tasaSeleccionada === 'usd_personalizado') {
-                    data.total_cobro = parseFloat(usdPersonalizadoInput.value) || 0;
+                    const montoUsd = parseFloat(usdPersonalizadoInput.value) || 0;
+                    const cantidadTotal = carrito.reduce((sum, item) => sum + item.cantidad, 0);
+                    data.total_cobro = montoUsd * cantidadTotal;
                 }
 
                 return fetch('/api/ventas', {
@@ -1342,7 +1373,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (tasaSeleccionada === 'bs_personalizado') {
                     data.total_cobro = parseMontoVES(bsPersonalizadoInput.value) || 0;
                 } else if (tasaSeleccionada === 'usd_personalizado') {
-                    data.total_cobro = parseFloat(usdPersonalizadoInput.value) || 0;
+                    const montoUsd = parseFloat(usdPersonalizadoInput.value) || 0;
+                    const cantidadTotal = carrito.reduce((sum, item) => sum + item.cantidad, 0);
+                    data.total_cobro = montoUsd * cantidadTotal;
                 }
 
                 return fetch('/api/ventas', {
@@ -1394,7 +1427,8 @@ document.addEventListener('DOMContentLoaded', function() {
             metodo_pago: metodoPago.value,
             bs_personalizado: bsPersonalizadoInput.value,
             usd_personalizado: usdPersonalizadoInput.value,
-            factorAjuste: factorAjuste
+            factorAjuste: factorAjuste,
+            montoUsdPersonalizado: montoUsdPersonalizado
         };
         sessionStorage.setItem('venta_estado', JSON.stringify(estado));
         sessionStorage.setItem('factorAjuste', factorAjuste);
@@ -1408,6 +1442,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         if (!saved) {
             factorAjuste = 1;
+            montoUsdPersonalizado = 0;
             return;
         }
         try {
@@ -1435,11 +1470,15 @@ document.addEventListener('DOMContentLoaded', function() {
                         if (estado.usd_personalizado) {
                             usdPersonalizadoInput.value = estado.usd_personalizado;
                             formatearCampoUsd(usdPersonalizadoInput);
+                            montoUsdPersonalizado = parseFloat(estado.usd_personalizado) || 0;
                         }
                     }
                 }
                 if (estado.factorAjuste) {
                     factorAjuste = estado.factorAjuste;
+                }
+                if (estado.montoUsdPersonalizado !== undefined) {
+                    montoUsdPersonalizado = estado.montoUsdPersonalizado;
                 }
                 recalcularFactorAjuste();
                 actualizarTicket();
@@ -1452,6 +1491,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 usdPersonalizadoInput.value = '';
                 carrito = [];
                 factorAjuste = 1;
+                montoUsdPersonalizado = 0;
                 renderCarrito();
                 actualizarTicket();
             }
@@ -1646,7 +1686,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (tasaSeleccionada === 'bs_personalizado') {
                     data.total_cobro = parseMontoVES(bsPersonalizadoInput.value) || 0;
                 } else if (tasaSeleccionada === 'usd_personalizado') {
-                    data.total_cobro = parseFloat(usdPersonalizadoInput.value) || 0;
+                    const montoUsd = parseFloat(usdPersonalizadoInput.value) || 0;
+                    const cantidadTotal = carrito.reduce((sum, item) => sum + item.cantidad, 0);
+                    data.total_cobro = montoUsd * cantidadTotal;
                 }
 
                 const ventaResp = await fetch('/api/ventas', {
