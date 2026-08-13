@@ -2553,9 +2553,14 @@ def registrar_venta():
 
     # ============================================================
     # 🔥 CORRECCIÓN FINAL: AGREGAR porcentaje_iva Y monto_iva_ves AL OBJETO venta
+    # Y REDONDEAR subtotal_ves y total_ves A 2 DECIMALES
     # ============================================================
     # Calcular el monto del IVA en VES usando el subtotal y el porcentaje
     monto_iva_ves = float(venta.subtotal_ves or 0) * (config_ticket.get('porcentaje_iva', 0) / 100)
+
+    # Redondear a 2 decimales para evitar errores de visualización
+    subtotal_ves_redondeado = round(float(venta.subtotal_ves or 0), 2)
+    total_ves_redondeado = round(float(venta.total_ves or 0), 2)
 
     # Respuesta final
     response_data = {
@@ -2565,11 +2570,10 @@ def registrar_venta():
             'fecha_formateada': fecha_formateada_resp,
             'total_usd': float(venta.total_usd),
             'tasa_bcv': float(venta.tasa_bcv_usd),
-            'subtotal_ves': float(venta.subtotal_ves or 0),
-            'total_ves': float(venta.total_ves or 0),
+            'subtotal_ves': subtotal_ves_redondeado,
+            'total_ves': total_ves_redondeado,
             'metodo_pago': venta.metodo_pago,
             'metodo_cobro': venta.metodo_cobro,
-            # 🔥 NUEVOS CAMPOS PARA EL DESGLOSE DE IVA
             'porcentaje_iva': config_ticket.get('porcentaje_iva', 0),
             'monto_iva_ves': monto_iva_ves
         },
