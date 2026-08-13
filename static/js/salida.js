@@ -484,7 +484,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         totalCarrito.textContent = `$${formatearMonto(total)}`;
 
-        // 🔥 CANTIDAD: evento INPUT (antes era change)
+        // Cantidad: evento INPUT
         document.querySelectorAll('.cantidad-item').forEach(input => {
             input.addEventListener('input', function() {
                 const index = parseInt(this.dataset.index);
@@ -498,7 +498,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
 
-        // 🔥 CHECKBOX OFERTA: evento INPUT (antes era change)
+        // Checkbox oferta: evento INPUT
         document.querySelectorAll('.oferta-checkbox').forEach(chk => {
             chk.addEventListener('input', function() {
                 const index = parseInt(this.dataset.index);
@@ -514,7 +514,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
 
-        // 🔥 DESCUENTO: evento INPUT ahora actualiza en tiempo real
+        // Descuento: evento INPUT actualiza en tiempo real
         document.querySelectorAll('.descuento-input').forEach(input => {
             input.addEventListener('input', function() {
                 const index = parseInt(this.dataset.index);
@@ -524,11 +524,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 carrito[index].descuento = valor;
                 if (valor > 0 && !carrito[index].ofertaActiva) {
                     carrito[index].ofertaActiva = true;
-                    // Actualizar el checkbox visualmente
                     const chk = this.closest('tr').querySelector('.oferta-checkbox');
                     if (chk) chk.checked = true;
                 }
-                // 🔥 ACTUALIZAR VISTA INMEDIATAMENTE
                 renderCarrito();
                 recalcularFactorAjuste();
                 actualizarTicket();
@@ -628,7 +626,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // ---------- TICKET VIRTUAL (MODIFICADO PARA MOSTRAR IVA EN VES) ----------
+    // ---------- TICKET VIRTUAL (CORREGIDO: INSERCIÓN DE IVA ROBUSTA) ----------
     function actualizarTicket() {
         controlarVisibilidadSubtotal();
 
@@ -742,6 +740,7 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
+        // 🔥 CÁLCULO DE SUBTOTAL VES Y TOTAL VES CON IVA
         if (carrito.length > 0) {
             let subtotalUsdOriginal = carrito.reduce((sum, item) => {
                 const precioConDesc = getPrecioConDescuento(item);
@@ -797,33 +796,36 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (ticketTotal) ticketTotal.textContent = `Bs ${formatearMonto(totalMostrar)}`;
             }
 
-            // ============================================================
-            // 🔥 NUEVO: INSERTAR LÍNEA DEL IVA EN VES (si corresponde)
-            // ============================================================
+            // 🔥 INSERTAR IVA EN VES DE FORMA ROBUSTA
             const ivaPorcentaje = configTicket.ivaPorcentaje || 0;
-            // Solo mostrar IVA en VES si el método de cobro es en VES y el porcentaje > 0
             const esMetodoVes = tasaSeleccionada !== 'usd' && tasaSeleccionada !== 'usd_personalizado';
-            
-            // Buscar el contenedor de totales VES (donde están subtotal y total)
-            const totalContainer = document.querySelector('.border-b-2.border-black.pb-2.mb-2');
+
+            // Buscar el contenedor de totales (el que está después de la tabla de productos)
+            // Usamos el elemento que contiene el total VES (ticketTotal) y su contenedor más cercano
+            let ivaElement = document.getElementById('ticket-iva-ves');
+            let totalContainer = ticketTotal.closest('.border-b-2.border-black.pb-2.mb-2');
+            if (!totalContainer) {
+                // Si no encuentra ese contenedor, buscar el padre directo de ticketTotal
+                totalContainer = ticketTotal.parentElement.parentElement;
+            }
+
             if (totalContainer) {
-                let ivaElement = document.getElementById('ticket-iva-ves');
-                // Buscar el div del total (para insertar antes)
-                const totalDiv = ticketTotal.closest('.flex.justify-between.font-bold');
-                
                 if (!ivaElement) {
-                    // Crear el elemento si no existe
                     ivaElement = document.createElement('div');
                     ivaElement.id = 'ticket-iva-ves';
                     ivaElement.className = 'flex justify-between';
-                    if (totalDiv) {
-                        totalContainer.insertBefore(ivaElement, totalDiv);
-                    } else {
-                        // Fallback: insertar al final del contenedor
-                        totalContainer.appendChild(ivaElement);
-                    }
                 }
-                
+
+                // Determinar dónde insertar: justo antes del total VES (ticketTotal)
+                const totalParent = ticketTotal.closest('.flex.justify-between.font-bold');
+                if (totalParent && totalParent.parentElement === totalContainer) {
+                    // Insertar antes del total
+                    totalContainer.insertBefore(ivaElement, totalParent);
+                } else {
+                    // Fallback: insertar al final del contenedor
+                    totalContainer.appendChild(ivaElement);
+                }
+
                 // Mostrar u ocultar según condiciones
                 if (ivaPorcentaje > 0 && esMetodoVes && subtotalVes > 0) {
                     ivaElement.style.display = 'flex';
@@ -833,8 +835,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     ivaElement.style.display = 'none';
                 }
             }
-            // ============================================================
-
         } else {
             if (ticketSubtotalUsd) ticketSubtotalUsd.textContent = '$0,00';
             if (ticketSubtotalVes) ticketSubtotalVes.textContent = 'Bs 0,00';
