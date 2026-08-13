@@ -2310,25 +2310,13 @@ def registrar_venta():
         subtotal_ves = total_cobro
         factor_ajuste = 1.0
     elif metodo_cobro == 'bs_personalizado':
-        # total_cobro es el monto en Bs ingresado (precio unitario en Bs)
+        # 🔥 REDONDEO: total_cobro redondeado a 2 decimales
         total_cobro = round(data.get('total_cobro', subtotal_usd * tasa_personalizada), 2)
-        # Calcular cantidad total de productos
-        cantidad_total = sum(item['cantidad'] for item in items)
-        if cantidad_total == 0 or tasa_usd == 0:
-            return jsonify({'error': 'Cantidad total o tasa inválida'}), 400
-        # Precio base en USD (sin descuento)
-        precio_base_usd = total_cobro / (cantidad_total * tasa_usd)
-        moneda_cobro = 'VES'
-        # Recalcular subtotal_usd con descuentos
-        subtotal_usd_calc = 0.0
-        for item_data in items_data:
-            precio_unitario_con_desc = precio_base_usd * (1 - item_data['descuento_porcentaje'] / 100)
-            subtotal_usd_calc += precio_unitario_con_desc * item_data['cantidad']
-        subtotal_usd = round(subtotal_usd_calc, 2)
-        # subtotal_ves = subtotal_usd * tasa_usd
-        subtotal_ves = round(subtotal_usd * tasa_usd, 2)
         tasa_aplicada = total_cobro / subtotal_usd if subtotal_usd > 0 else tasa_personalizada
-        factor_ajuste = 1.0
+        moneda_cobro = 'VES'
+        # 🔥 REDONDEO: subtotal_ves redondeado a 2 decimales
+        subtotal_ves = round(total_cobro, 2)
+        factor_ajuste = total_cobro / subtotal_usd if subtotal_usd > 0 else 1.0
     elif metodo_cobro == 'usd_personalizado':
         # 🔥 REDONDEO: total_cobro redondeado a 2 decimales
         total_cobro = round(data.get('total_cobro', subtotal_usd), 2)
