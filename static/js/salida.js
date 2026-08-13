@@ -136,6 +136,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     bsPersonalizadoInput.addEventListener('input', function() {
         recalcularFactorAjuste();
+        renderCarrito();
         actualizarTicket();
         actualizarEquivalenteUsd();
         guardarEstado();
@@ -393,10 +394,11 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // ---------- CALCULAR PRECIO CON DESCUENTO ----------
-    function getPrecioConDescuento(item) {
+    function getPrecioConDescuento(item, precioBaseOverride) {
         if (!item) return 0;
         const descuento = item.descuento || 0;
-        return item.precio * (1 - descuento / 100);
+        const base = precioBaseOverride !== undefined ? precioBaseOverride : item.precio;
+        return base * (1 - descuento / 100);
     }
 
     // ---------- RECALCULAR FACTOR DE AJUSTE ----------
@@ -405,10 +407,30 @@ document.addEventListener('DOMContentLoaded', function() {
             factorAjuste = 1;
             return;
         }
-        let subtotalUsdOriginal = carrito.reduce((sum, item) => {
-            const precioConDesc = getPrecioConDescuento(item);
-            return sum + precioConDesc * item.cantidad;
-        }, 0);
+
+        // Para bs_personalizado, el precio base en USD es montoBs / tasaUsd
+        let precioBaseUsd = null;
+        if (tasaSeleccionada === 'bs_personalizado') {
+            const montoBs = parseMontoVES(bsPersonalizadoInput.value) || 0;
+            if (montoBs > 0 && tasaUsd > 0) {
+                precioBaseUsd = montoBs / tasaUsd;
+            }
+        }
+
+        let subtotalUsdOriginal = 0;
+        if (precioBaseUsd !== null && precioBaseUsd > 0) {
+            // Usar precio base personalizado para todos los productos
+            carrito.forEach(item => {
+                const precioConDesc = getPrecioConDescuento(item, precioBaseUsd);
+                subtotalUsdOriginal += precioConDesc * item.cantidad;
+            });
+        } else {
+            // Comportamiento normal
+            carrito.forEach(item => {
+                const precioConDesc = getPrecioConDescuento(item);
+                subtotalUsdOriginal += precioConDesc * item.cantidad;
+            });
+        }
 
         let subtotalUsdAjustado = subtotalUsdOriginal;
 
@@ -417,13 +439,8 @@ document.addEventListener('DOMContentLoaded', function() {
             subtotalUsdAjustado = totalBs / tasaUsd;
             factorAjuste = subtotalUsdAjustado / subtotalUsdOriginal;
         } else if (tasaSeleccionada === 'bs_personalizado') {
-            const montoBs = parseMontoVES(bsPersonalizadoInput.value) || 0;
-            if (montoBs > 0 && subtotalUsdOriginal > 0) {
-                subtotalUsdAjustado = montoBs / tasaUsd;
-                factorAjuste = subtotalUsdAjustado / subtotalUsdOriginal;
-            } else {
-                factorAjuste = 1;
-            }
+            // Ya tenemos el precio base personalizado, no se necesita factor extra
+            factorAjuste = 1;
         } else if (tasaSeleccionada === 'usd_personalizado') {
             factorAjuste = 1;
         } else if (tasaSeleccionada === 'bcv_eur') {
@@ -448,15 +465,26 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         let total = 0;
-        const precioUnitarioPersonalizado = (tasaSeleccionada === 'usd_personalizado') ? montoUsdPersonalizado : null;
+        // Para bs_personalizado: precio base en USD = montoBs / tasaUsd
+        let precioBaseUsd = null;
+        if (tasaSeleccionada === 'bs_personalizado') {
+            const montoBs = parseMontoVES(bsPersonalizadoInput.value) || 0;
+            if (montoBs > 0 && tasaUsd > 0) {
+                precioBaseUsd = montoBs / tasaUsd;
+            }
+        }
+        // Para usd_personalizado: precio base = montoUsdPersonalizado
+        const usarPrecioUsdPersonalizado = (tasaSeleccionada === 'usd_personalizado') && montoUsdPersonalizado > 0;
 
         carrito.forEach((item, index) => {
             let precioBase = item.precio;
-            if (precioUnitarioPersonalizado !== null && precioUnitarioPersonalizado > 0) {
-                precioBase = precioUnitarioPersonalizado;
+            if (precioBaseUsd !== null && precioBaseUsd > 0) {
+                precioBase = precioBaseUsd;
+            } else if (usarPrecioUsdPersonalizado) {
+                precioBase = montoUsdPersonalizado;
             }
             const precioConDesc = precioBase * (1 - (item.descuento || 0) / 100);
-            const precioEfectivo = precioConDesc;
+            const precioEfectivo = precioConDesc * factorAjuste;
             const subtotal = precioEfectivo * item.cantidad;
             total += subtotal;
 
@@ -486,6 +514,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         totalCarrito.textContent = `$${formatearMonto(total)}`;
 
+        // Eventos...
         document.querySelectorAll('.cantidad-item').forEach(input => {
             input.addEventListener('input', function() {
                 const index = parseInt(this.dataset.index);
@@ -589,16 +618,25 @@ document.addEventListener('DOMContentLoaded', function() {
         const mostrar = tasaSeleccionada === 'personalizada' || tasaSeleccionada === 'bs_personalizado';
         if (mostrar) {
             equivalenteUsdContainer.classList.remove('hidden');
-            let subtotalUsd = carrito.reduce((sum, item) => {
-                const precioConDesc = getPrecioConDescuento(item);
-                return sum + precioConDesc * item.cantidad;
-            }, 0);
+            let subtotalUsd = 0;
+            // Calcular con las mismas reglas
+            let precioBaseUsd = null;
+            if (tasaSeleccionada === 'bs_personalizado') {
+                const montoBs = parseMontoVES(bsPersonalizadoInput.value) || 0;
+                if (montoBs > 0 && tasaUsd > 0) {
+                    precioBaseUsd = montoBs / tasaUsd;
+                }
+            }
+            carrito.forEach(item => {
+                const base = precioBaseUsd !== null ? precioBaseUsd : item.precio;
+                const precioConDesc = getPrecioConDescuento(item, base);
+                subtotalUsd += precioConDesc * item.cantidad;
+            });
             let totalMostrar = 0;
             if (tasaSeleccionada === 'personalizada') {
                 totalMostrar = subtotalUsd * tasaPersonalizada / tasaUsd;
             } else if (tasaSeleccionada === 'bs_personalizado') {
-                const montoBs = parseMontoVES(bsPersonalizadoInput.value) || 0;
-                totalMostrar = montoBs / tasaUsd;
+                totalMostrar = subtotalUsd;
             }
             equivalenteUsd.textContent = `$${formatearMonto(totalMostrar)}`;
         } else {
@@ -648,29 +686,30 @@ document.addEventListener('DOMContentLoaded', function() {
             ticketDireccion.style.display = configTicket.mostrarDireccionCliente ? 'block' : 'none';
         }
 
-        // ---------- CALCULAR SUBTOTAL EN USD CON DESCUENTOS Y PRECIO PERSONALIZADO ----------
+        // ---------- CALCULAR SUBTOTAL EN USD CON DESCUENTOS Y PRECIO BASE PERSONALIZADO ----------
         let subtotalUsd = 0;
-        const precioUnitarioPersonalizado = (tasaSeleccionada === 'usd_personalizado') ? montoUsdPersonalizado : null;
-        const montoBsPersonalizado = (tasaSeleccionada === 'bs_personalizado') ? parseMontoVES(bsPersonalizadoInput.value) || 0 : null;
-
-        // Para Bs Personalizado, el precio base en USD es montoBs / tasaUsd
-        const precioUnitarioBsPersonalizado = (montoBsPersonalizado !== null && montoBsPersonalizado > 0 && tasaUsd > 0) 
-            ? montoBsPersonalizado / tasaUsd 
-            : null;
+        // Precio base para bs_personalizado
+        let precioBaseUsd = null;
+        if (tasaSeleccionada === 'bs_personalizado') {
+            const montoBs = parseMontoVES(bsPersonalizadoInput.value) || 0;
+            if (montoBs > 0 && tasaUsd > 0) {
+                precioBaseUsd = montoBs / tasaUsd;
+            }
+        }
+        const usarPrecioUsdPersonalizado = (tasaSeleccionada === 'usd_personalizado') && montoUsdPersonalizado > 0;
 
         carrito.forEach(item => {
             let precioBase = item.precio;
-            if (precioUnitarioPersonalizado !== null && precioUnitarioPersonalizado > 0) {
-                precioBase = precioUnitarioPersonalizado;
-            } else if (precioUnitarioBsPersonalizado !== null && precioUnitarioBsPersonalizado > 0) {
-                precioBase = precioUnitarioBsPersonalizado;
+            if (precioBaseUsd !== null && precioBaseUsd > 0) {
+                precioBase = precioBaseUsd;
+            } else if (usarPrecioUsdPersonalizado) {
+                precioBase = montoUsdPersonalizado;
             }
             const precioConDesc = precioBase * (1 - (item.descuento || 0) / 100);
-            const precioEfectivo = Number(precioConDesc.toFixed(2));
+            const precioEfectivo = Number((precioConDesc * factorAjuste).toFixed(2));
             const subtotalItem = Number((precioEfectivo * item.cantidad).toFixed(2));
             subtotalUsd += subtotalItem;
         });
-
         subtotalUsd = Number(subtotalUsd.toFixed(2));
 
         // ---------- CALCULAR TOTAL EN VES Y TOTAL FINAL SEGÚN MÉTODO DE COBRO ----------
@@ -705,12 +744,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 tasaAplicada = tasaPersonalizada;
                 break;
             case 'bs_personalizado':
-                // El total en Bs es lo que el usuario ingresó
-                const montoBs = parseMontoVES(bsPersonalizadoInput.value) || 0;
-                subtotalVes = montoBs;
-                totalMostrar = montoBs;
+                // El total en Bs = subtotalUsd * tasaUsd (con descuentos aplicados)
+                subtotalVes = subtotalUsd * tasaUsd;
+                totalMostrar = subtotalUsd * tasaUsd;
                 simbolo = 'Bs ';
-                tasaAplicada = tasaUsd; // Se usa para referencia
+                tasaAplicada = tasaUsd;
                 break;
             case 'usd_personalizado':
                 subtotalVes = subtotalUsd * tasaUsd;
@@ -743,17 +781,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 return;
             }
 
-            // Recalcular con los valores ya preparados
             let subtotalUsdDisplay = 0;
             carrito.forEach(item => {
                 let precioBase = item.precio;
-                if (precioUnitarioPersonalizado !== null && precioUnitarioPersonalizado > 0) {
-                    precioBase = precioUnitarioPersonalizado;
-                } else if (precioUnitarioBsPersonalizado !== null && precioUnitarioBsPersonalizado > 0) {
-                    precioBase = precioUnitarioBsPersonalizado;
+                if (precioBaseUsd !== null && precioBaseUsd > 0) {
+                    precioBase = precioBaseUsd;
+                } else if (usarPrecioUsdPersonalizado) {
+                    precioBase = montoUsdPersonalizado;
                 }
                 const precioConDesc = precioBase * (1 - (item.descuento || 0) / 100);
-                const precioEfectivo = Number(precioConDesc.toFixed(2));
+                const precioEfectivo = Number((precioConDesc * factorAjuste).toFixed(2));
                 const subtotalItem = Number((precioEfectivo * item.cantidad).toFixed(2));
                 subtotalUsdDisplay += subtotalItem;
 
@@ -777,7 +814,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const ivaMonto = Number((subtotalUsdDisplay * (ivaPorcentaje / 100)).toFixed(2));
             const totalConIva = Number((subtotalUsdDisplay + ivaMonto).toFixed(2));
 
-            // Totales
             if (ticketSubtotalUsd) ticketSubtotalUsd.textContent = `$${formatearMonto(subtotalUsdDisplay)}`;
             if (ticketSubtotalVes) ticketSubtotalVes.textContent = `Bs ${formatearMonto(subtotalVes)}`;
             if (ticketIva) ticketIva.textContent = `$${formatearMonto(ivaMonto)}`;
@@ -961,9 +997,20 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         if (tasaSeleccionada === 'bs_personalizado') {
-            data.total_cobro = parseMontoVES(bsPersonalizadoInput.value) || 0;
+            // Calcular total en Bs con descuentos aplicados
+            let precioBaseUsd = null;
+            const montoBs = parseMontoVES(bsPersonalizadoInput.value) || 0;
+            if (montoBs > 0 && tasaUsd > 0) {
+                precioBaseUsd = montoBs / tasaUsd;
+            }
+            let totalUsd = 0;
+            carrito.forEach(item => {
+                const base = precioBaseUsd !== null ? precioBaseUsd : item.precio;
+                const precioConDesc = base * (1 - (item.descuento || 0) / 100);
+                totalUsd += precioConDesc * item.cantidad;
+            });
+            data.total_cobro = totalUsd * tasaUsd;
         } else if (tasaSeleccionada === 'usd_personalizado') {
-            // Calcular total con descuentos aplicados
             let total = 0;
             carrito.forEach(item => {
                 let precioBase = montoUsdPersonalizado;
@@ -1133,7 +1180,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 };
 
                 if (tasaSeleccionada === 'bs_personalizado') {
-                    data.total_cobro = parseMontoVES(bsPersonalizadoInput.value) || 0;
+                    let precioBaseUsd = null;
+                    const montoBs = parseMontoVES(bsPersonalizadoInput.value) || 0;
+                    if (montoBs > 0 && tasaUsd > 0) {
+                        precioBaseUsd = montoBs / tasaUsd;
+                    }
+                    let totalUsd = 0;
+                    carrito.forEach(item => {
+                        const base = precioBaseUsd !== null ? precioBaseUsd : item.precio;
+                        const precioConDesc = base * (1 - (item.descuento || 0) / 100);
+                        totalUsd += precioConDesc * item.cantidad;
+                    });
+                    data.total_cobro = totalUsd * tasaUsd;
                 } else if (tasaSeleccionada === 'usd_personalizado') {
                     let total = 0;
                     carrito.forEach(item => {
@@ -1269,7 +1327,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 };
 
                 if (tasaSeleccionada === 'bs_personalizado') {
-                    data.total_cobro = parseMontoVES(bsPersonalizadoInput.value) || 0;
+                    let precioBaseUsd = null;
+                    const montoBs = parseMontoVES(bsPersonalizadoInput.value) || 0;
+                    if (montoBs > 0 && tasaUsd > 0) {
+                        precioBaseUsd = montoBs / tasaUsd;
+                    }
+                    let totalUsd = 0;
+                    carrito.forEach(item => {
+                        const base = precioBaseUsd !== null ? precioBaseUsd : item.precio;
+                        const precioConDesc = base * (1 - (item.descuento || 0) / 100);
+                        totalUsd += precioConDesc * item.cantidad;
+                    });
+                    data.total_cobro = totalUsd * tasaUsd;
                 } else if (tasaSeleccionada === 'usd_personalizado') {
                     let total = 0;
                     carrito.forEach(item => {
@@ -1373,7 +1442,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 };
 
                 if (tasaSeleccionada === 'bs_personalizado') {
-                    data.total_cobro = parseMontoVES(bsPersonalizadoInput.value) || 0;
+                    let precioBaseUsd = null;
+                    const montoBs = parseMontoVES(bsPersonalizadoInput.value) || 0;
+                    if (montoBs > 0 && tasaUsd > 0) {
+                        precioBaseUsd = montoBs / tasaUsd;
+                    }
+                    let totalUsd = 0;
+                    carrito.forEach(item => {
+                        const base = precioBaseUsd !== null ? precioBaseUsd : item.precio;
+                        const precioConDesc = base * (1 - (item.descuento || 0) / 100);
+                        totalUsd += precioConDesc * item.cantidad;
+                    });
+                    data.total_cobro = totalUsd * tasaUsd;
                 } else if (tasaSeleccionada === 'usd_personalizado') {
                     let total = 0;
                     carrito.forEach(item => {
@@ -1690,7 +1770,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 };
 
                 if (tasaSeleccionada === 'bs_personalizado') {
-                    data.total_cobro = parseMontoVES(bsPersonalizadoInput.value) || 0;
+                    let precioBaseUsd = null;
+                    const montoBs = parseMontoVES(bsPersonalizadoInput.value) || 0;
+                    if (montoBs > 0 && tasaUsd > 0) {
+                        precioBaseUsd = montoBs / tasaUsd;
+                    }
+                    let totalUsd = 0;
+                    carrito.forEach(item => {
+                        const base = precioBaseUsd !== null ? precioBaseUsd : item.precio;
+                        const precioConDesc = base * (1 - (item.descuento || 0) / 100);
+                        totalUsd += precioConDesc * item.cantidad;
+                    });
+                    data.total_cobro = totalUsd * tasaUsd;
                 } else if (tasaSeleccionada === 'usd_personalizado') {
                     let total = 0;
                     carrito.forEach(item => {
