@@ -1,5 +1,5 @@
 # ============================================================
-# routes.py - Elements Store (con correcciones)
+# routes.py - Elements Store (con corrección en bs_personalizado)
 # ============================================================
 
 from flask import Blueprint, render_template, request, jsonify, current_app, send_file, session, redirect, url_for, flash
@@ -2146,6 +2146,7 @@ def reactivar_cliente(id):
 # API: VENTAS (PROTEGIDA) - CORREGIDO: TOTAL VES = SUBTOTAL + IVA
 # 🔥 MODIFICADO: uso de obtener_proximo_numero_ticket() (secuencia estricta)
 # 🔥 MODIFICADO: lógica mejorada para asignar cliente basado en datos del formulario
+# 🔥 CORRECCIÓN EN bs_personalizado: subtotal_ves = subtotal_usd * tasa_usd
 # ============================================================
 
 @api_bp.route('/ventas', methods=['POST'])
@@ -2301,11 +2302,14 @@ def registrar_venta():
         subtotal_ves = total_cobro
         factor_ajuste = 1.0
     elif metodo_cobro == 'bs_personalizado':
+        # 🔥 CORRECCIÓN: total_cobro es el monto en Bs ingresado por el usuario (ej: 68000)
         total_cobro = data.get('total_cobro', subtotal_usd * tasa_personalizada)
-        tasa_aplicada = total_cobro / subtotal_usd if subtotal_usd > 0 else tasa_personalizada
-        moneda_cobro = 'VES'
-        subtotal_ves = total_cobro
+        # factor_ajuste se usa solo para los precios unitarios de los detalles
         factor_ajuste = total_cobro / subtotal_usd if subtotal_usd > 0 else 1.0
+        tasa_aplicada = factor_ajuste * tasa_usd if subtotal_usd > 0 else tasa_usd
+        moneda_cobro = 'VES'
+        # ✅ CORRECCIÓN: subtotal_ves se calcula a partir del subtotal en USD (con descuentos) y la tasa BCV USD
+        subtotal_ves = round(subtotal_usd * tasa_usd, 2)
     elif metodo_cobro == 'usd_personalizado':
         total_cobro = data.get('total_cobro', subtotal_usd)
         factor_ajuste = total_cobro / subtotal_usd if subtotal_usd > 0 else 1.0
