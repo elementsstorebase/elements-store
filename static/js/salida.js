@@ -441,7 +441,7 @@ document.addEventListener('DOMContentLoaded', function() {
         sessionStorage.setItem('factorAjuste', factorAjuste);
     }
 
-    // ---------- RENDERIZAR CARRITO ----------
+    // ---------- RENDERIZAR CARRITO (con INPUT en tiempo real) ----------
     function renderCarrito() {
         carritoItems.innerHTML = '';
         if (carrito.length === 0) {
@@ -484,6 +484,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         totalCarrito.textContent = `$${formatearMonto(total)}`;
 
+        // Cantidad: input
         document.querySelectorAll('.cantidad-item').forEach(input => {
             input.addEventListener('input', function() {
                 const index = parseInt(this.dataset.index);
@@ -497,6 +498,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
 
+        // Checkbox oferta: input
         document.querySelectorAll('.oferta-checkbox').forEach(chk => {
             chk.addEventListener('input', function() {
                 const index = parseInt(this.dataset.index);
@@ -512,6 +514,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
 
+        // Descuento: input + blur
         document.querySelectorAll('.descuento-input').forEach(input => {
             input.addEventListener('input', function() {
                 const index = parseInt(this.dataset.index);
@@ -623,7 +626,9 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // ---------- TICKET VIRTUAL (CORREGIDO: IVA EN VES) ----------
+    // ============================================================
+    // 🔥 FUNCIÓN ACTUALIZAR TICKET (CORREGIDA SIN insertBefore)
+    // ============================================================
     function actualizarTicket() {
         controlarVisibilidadSubtotal();
 
@@ -793,23 +798,41 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             // ============================================================
-            // 🔥 NUEVO: INSERTAR LÍNEA DEL IVA EN VES (CORREGIDO)
+            // 🔥 INSERTAR LÍNEA DEL IVA EN VES (CORREGIDO: SIN insertBefore)
             // ============================================================
             const ivaPorcentaje = configTicket.ivaPorcentaje || 0;
             const esMetodoVes = tasaSeleccionada !== 'usd' && tasaSeleccionada !== 'usd_personalizado';
-
-            // Buscar el elemento Subtotal VES para insertar después
-            const subtotalVesElement = document.getElementById('ticket-subtotal-ves');
-            if (subtotalVesElement) {
+            
+            let totalContainer = document.querySelector('.border-b-2.border-black.pb-2.mb-2');
+            if (!totalContainer) {
+                totalContainer = document.querySelector('.ticket-totales') || 
+                                 document.querySelector('#ticket-virtual > div:nth-child(4)');
+            }
+            
+            if (totalContainer) {
                 let ivaElement = document.getElementById('ticket-iva-ves');
+                
                 if (!ivaElement) {
                     ivaElement = document.createElement('div');
                     ivaElement.id = 'ticket-iva-ves';
                     ivaElement.className = 'flex justify-between';
-                    // Insertar después de subtotalVesElement
-                    subtotalVesElement.parentNode.insertBefore(ivaElement, subtotalVesElement.nextSibling);
+                    // Buscar el elemento que contiene "TOTAL" para insertar antes
+                    const totalDivs = totalContainer.querySelectorAll('.flex.justify-between');
+                    let lastTotalDiv = null;
+                    for (let div of totalDivs) {
+                        if (div.textContent.includes('TOTAL')) {
+                            lastTotalDiv = div;
+                            break;
+                        }
+                    }
+                    if (lastTotalDiv && lastTotalDiv.parentNode === totalContainer) {
+                        totalContainer.insertBefore(ivaElement, lastTotalDiv);
+                    } else {
+                        // Si no se encuentra, agregar al final
+                        totalContainer.appendChild(ivaElement);
+                    }
                 }
-
+                
                 // Mostrar u ocultar según condiciones
                 if (ivaPorcentaje > 0 && esMetodoVes && subtotalVes > 0) {
                     ivaElement.style.display = 'flex';

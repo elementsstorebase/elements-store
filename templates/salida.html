@@ -383,16 +383,11 @@
             const totalVes = venta.total_ves || 0;
             lines.push(alinearIzquierdaDerecha('SUBTOTAL VES:', `Bs ${formatearNumeroVES(subtotalVes)}`, col));
 
-            // 🔥 DESGLOSE DE IVA - AHORA CON DEBUG Y COMPROBACIÓN ROBUSTA
-            const ivaPorcentaje = configTicket.porcentaje_iva || 0;
-            console.log('DEBUG WebUSB - IVA Porcentaje:', ivaPorcentaje);
-            console.log('DEBUG WebUSB - Subtotal VES:', subtotalVes);
-            console.log('DEBUG WebUSB - ConfigTicket completo:', configTicket);
-
-            if (ivaPorcentaje > 0 && subtotalVes > 0) {
-                const ivaMonto = subtotalVes * (ivaPorcentaje / 100);
+            // 🔥 DESGLOSE DINÁMICO DE IVA (solo si > 0%) - usando porcentaje_iva
+            if (configTicket.porcentaje_iva > 0) {
+                const ivaMonto = subtotalVes * (configTicket.porcentaje_iva / 100);
                 const totalConIva = subtotalVes + ivaMonto;
-                lines.push(alinearIzquierdaDerecha(`IVA (${ivaPorcentaje}%):`, `Bs ${formatearNumeroVES(ivaMonto)}`, col));
+                lines.push(alinearIzquierdaDerecha(`IVA (${configTicket.porcentaje_iva}%):`, `Bs ${formatearNumeroVES(ivaMonto)}`, col));
                 lines.push(CONFIG.ESC + 'E\x01');
                 lines.push(alinearIzquierdaDerecha('TOTAL VES:', `Bs ${formatearNumeroVES(totalConIva)}`, col));
                 lines.push(CONFIG.ESC + 'E\x00');
@@ -400,10 +395,6 @@
                 lines.push(CONFIG.ESC + 'E\x01');
                 lines.push(alinearIzquierdaDerecha('TOTAL VES:', `Bs ${formatearNumeroVES(totalVes)}`, col));
                 lines.push(CONFIG.ESC + 'E\x00');
-                // Si no se mostró el IVA, mostrar un mensaje de debug en consola
-                if (ivaPorcentaje > 0 && subtotalVes === 0) {
-                    console.warn('DEBUG: IVA > 0 pero subtotalVes es 0, no se mostrará línea de IVA.');
-                }
             }
 
             lines.push(alinearIzquierdaDerecha('Metodo Pago:', sanitizarPOS(venta.metodo_pago || '-'), col));
