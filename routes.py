@@ -445,7 +445,8 @@ def generar_ticket_pos58(datos_venta, config_ticket, max_chars=32):
     # 🔥 CORRECCIÓN: Obtener subtotal_usd de forma segura con float() y default 0.0
     subtotal_usd = float(datos_venta.get('subtotal_usd', 0.0) or 0.0)
     total_usd = float(datos_venta.get('total_usd', 0.0) or 0.0)
-    subtotal_ves = float(datos_venta.get('subtotal_ves', 0.0) or 0.0)
+    # 🔥 REDONDEO: subtotal_ves redondeado a 2 decimales
+    subtotal_ves = round(float(datos_venta.get('subtotal_ves', 0.0) or 0.0), 2)
     tasa_bcv = float(datos_venta.get('tasa_bcv', 0.0) or 0.0)
 
     # Casilla: "Mostrar Subtotal USD en el ticket"
@@ -2153,6 +2154,7 @@ def reactivar_cliente(id):
 # 🔥 MODIFICADO: uso de obtener_proximo_numero_ticket() (secuencia estricta)
 # 🔥 MODIFICADO: lógica mejorada para asignar cliente basado en datos del formulario
 # 🔥 MODIFICADO: respuesta enriquecida para WebUSB
+# 🔥 CORRECCIÓN DE REDONDEO: total_cobro, subtotal_ves, total_ves_final redondeados a 2 decimales
 # ============================================================
 
 @api_bp.route('/ventas', methods=['POST'])
@@ -2308,17 +2310,21 @@ def registrar_venta():
         subtotal_ves = total_cobro
         factor_ajuste = 1.0
     elif metodo_cobro == 'bs_personalizado':
-        total_cobro = data.get('total_cobro', subtotal_usd * tasa_personalizada)
+        # 🔥 REDONDEO: total_cobro redondeado a 2 decimales
+        total_cobro = round(data.get('total_cobro', subtotal_usd * tasa_personalizada), 2)
         tasa_aplicada = total_cobro / subtotal_usd if subtotal_usd > 0 else tasa_personalizada
         moneda_cobro = 'VES'
-        subtotal_ves = total_cobro
+        # 🔥 REDONDEO: subtotal_ves redondeado a 2 decimales
+        subtotal_ves = round(total_cobro, 2)
         factor_ajuste = total_cobro / subtotal_usd if subtotal_usd > 0 else 1.0
     elif metodo_cobro == 'usd_personalizado':
-        total_cobro = data.get('total_cobro', subtotal_usd)
+        # 🔥 REDONDEO: total_cobro redondeado a 2 decimales
+        total_cobro = round(data.get('total_cobro', subtotal_usd), 2)
         factor_ajuste = total_cobro / subtotal_usd if subtotal_usd > 0 else 1.0
         tasa_aplicada = 1.0
         moneda_cobro = 'USD'
-        subtotal_ves = total_cobro * tasa_usd
+        # 🔥 REDONDEO: subtotal_ves redondeado a 2 decimales
+        subtotal_ves = round(total_cobro * tasa_usd, 2)
     else:
         tasa_aplicada = 1.0
         moneda_cobro = 'USD'
@@ -2334,13 +2340,14 @@ def registrar_venta():
 
     if iva_porcentaje > 0:
         monto_iva_ves = subtotal_ves * (iva_porcentaje / 100)
-        total_ves_final = subtotal_ves + monto_iva_ves
+        # 🔥 REDONDEO: total_ves_final redondeado a 2 decimales
+        total_ves_final = round(subtotal_ves + monto_iva_ves, 2)
     else:
-        total_ves_final = subtotal_ves
+        total_ves_final = round(subtotal_ves, 2)
 
     # Si el método de cobro es en VES, el total_cobro debe ser total_ves_final
     if moneda_cobro == 'VES':
-        total_cobro = total_ves_final
+        total_cobro = round(total_ves_final, 2)
 
     # Crear la venta
     venta = Venta(
@@ -4469,12 +4476,12 @@ def finalizar_apartado(id):
 
     if iva_porcentaje > 0:
         monto_iva_ves = subtotal_ves * (iva_porcentaje / 100)
-        total_ves_final = subtotal_ves + monto_iva_ves
+        total_ves_final = round(subtotal_ves + monto_iva_ves, 2)
     else:
-        total_ves_final = subtotal_ves
+        total_ves_final = round(subtotal_ves, 2)
 
     if moneda_cobro == 'VES':
-        total_cobro = total_ves_final
+        total_cobro = round(total_ves_final, 2)
 
     venta = Venta(
         cliente_id=apartado.cliente_id,
