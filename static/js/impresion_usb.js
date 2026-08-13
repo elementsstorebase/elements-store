@@ -7,6 +7,8 @@
  * Uso:
  *   window.imprimirTicketUSB(datosServidor)
  *   donde datosServidor = { venta, detalles, cliente, configTicket }
+ * 
+ * 🔥 CORREGIDO: redondeo a 2 decimales para evitar discrepancias en el ticket físico
  */
 
 (function() {
@@ -139,25 +141,38 @@
         lines.push(CONFIG.ESC + 'E\x00');
         lines.push(separador(col, '-'));
 
-        // --- Totales VES CON IVA (CORREGIDO) ---
+        // --- Totales VES CON IVA (CORREGIDO: REDONDEO A 2 DECIMALES) ---
+        // 🔥 Obtener valores del servidor (ya vienen con IVA incluido)
         const subtotalVes = venta.subtotal_ves || 0;
         const totalVes = venta.total_ves || 0;
-        const ivaPorcentaje = configTicket.porcentaje_iva || 0; // 🔥 CAMBIO: usar porcentaje_iva
+        const tasaBcv = venta.tasa_bcv || 0;
+        const ivaPorcentaje = configTicket.porcentaje_iva || 0;
 
-        lines.push(alinearIzquierdaDerecha('Tasa BCV:', `Bs ${venta.tasa_bcv.toFixed(2)}`, col));
-        lines.push(alinearIzquierdaDerecha('SUBTOTAL VES:', `Bs ${formatearNumeroVES(subtotalVes)}`, col));
+        // 🔥 Redondear a 2 decimales para consistencia con el ticket virtual
+        const subtotalVesRed = Math.round(subtotalVes * 100) / 100;
+        const totalVesRed = Math.round(totalVes * 100) / 100;
+        const tasaBcvRed = Math.round(tasaBcv * 100) / 100;
+
+        // Calcular IVA redondeado (si el servidor no lo envía)
+        let ivaMontoRed = 0;
+        if (ivaPorcentaje > 0) {
+            ivaMontoRed = Math.round((subtotalVesRed * (ivaPorcentaje / 100)) * 100) / 100;
+        }
+
+        lines.push(alinearIzquierdaDerecha('Tasa BCV:', `Bs ${formatearNumeroVES(tasaBcvRed)}`, col));
+        lines.push(alinearIzquierdaDerecha('SUBTOTAL VES:', `Bs ${formatearNumeroVES(subtotalVesRed)}`, col));
 
         // 🔥 DESGLOSE DINÁMICO DE IVA (solo si > 0)
         if (ivaPorcentaje > 0) {
-            const ivaMonto = subtotalVes * (ivaPorcentaje / 100);
-            const totalConIva = subtotalVes + ivaMonto;
-            lines.push(alinearIzquierdaDerecha(`IVA (${ivaPorcentaje}%):`, `Bs ${formatearNumeroVES(ivaMonto)}`, col));
+            lines.push(alinearIzquierdaDerecha(`IVA (${ivaPorcentaje}%):`, `Bs ${formatearNumeroVES(ivaMontoRed)}`, col));
+            const totalConIva = subtotalVesRed + ivaMontoRed;
+            const totalConIvaRed = Math.round(totalConIva * 100) / 100;
             lines.push(CONFIG.ESC + 'E\x01');
-            lines.push(alinearIzquierdaDerecha('TOTAL VES:', `Bs ${formatearNumeroVES(totalConIva)}`, col));
+            lines.push(alinearIzquierdaDerecha('TOTAL VES:', `Bs ${formatearNumeroVES(totalConIvaRed)}`, col));
             lines.push(CONFIG.ESC + 'E\x00');
         } else {
             lines.push(CONFIG.ESC + 'E\x01');
-            lines.push(alinearIzquierdaDerecha('TOTAL VES:', `Bs ${formatearNumeroVES(totalVes)}`, col));
+            lines.push(alinearIzquierdaDerecha('TOTAL VES:', `Bs ${formatearNumeroVES(totalVesRed)}`, col));
             lines.push(CONFIG.ESC + 'E\x00');
         }
 
@@ -237,9 +252,8 @@
         }
     }
 
-    // -------------------- FUNCIÓN PRINCIPAL EXPUESTA (CORREGIDA) --------------------
+    // -------------------- FUNCIÓN PRINCIPAL EXPUESTA --------------------
     window.imprimirTicketUSB = async function(datosServidor) {
-        // Verificar que lleguen los datos correctos
         if (!datosServidor || !datosServidor.detalles || datosServidor.detalles.length === 0) {
             alert('No hay datos del ticket para imprimir');
             return;
