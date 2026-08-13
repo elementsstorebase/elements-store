@@ -5,7 +5,8 @@
  * Compatible con Chrome/Edge 89+
  * 
  * Uso:
- *   window.imprimirTicketUSB(datos)
+ *   window.imprimirTicketUSB(datosServidor)
+ *   donde datosServidor = { venta, detalles, cliente, configTicket }
  */
 
 (function() {
@@ -13,7 +14,7 @@
 
     // -------------------- CONFIGURACIÓN DE IMPRESORA --------------------
     const CONFIG = {
-        // Caracteres por línea (ajustar según ancho: 32 para 58mm, 42 para 80mm)
+        // Caracteres por línea (32 para 58mm, 42 para 80mm)
         columnas: 32,
         // Códigos ESC/POS
         ESC: '\x1B',
@@ -22,12 +23,78 @@
         CR: '\x0D'
     };
 
-    // -------------------- GENERADOR DE TICKET ESC/POS --------------------
-    function generarBufferTicket(datos) {
-        const { carrito, cliente, totalUsd, subtotalVes, metodoPago, tasa, configTicket, numeroTicket, fecha } = datos;
+    // -------------------- SANITIZADOR ASCII --------------------
+    function sanitizarPOS(texto) {
+        if (!texto) return '';
+        return texto.toString()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/ñ/g, "n")
+            .replace(/Ñ/g, "N")
+            .replace(/á/g, "a")
+            .replace(/é/g, "e")
+            .replace(/í/g, "i")
+            .replace(/ó/g, "o")
+            .replace(/ú/g, "u")
+            .replace(/Á/g, "A")
+            .replace(/É/g, "E")
+            .replace(/Í/g, "I")
+            .replace(/Ó/g, "O")
+            .replace(/Ú/g, "U");
+    }
+
+    // -------------------- WORD WRAP (respeta palabras) --------------------
+    function formatearPalabrasPOS(texto, anchoMax = 32) {
+        if (!texto) return '';
+        const palabras = sanitizarPOS(texto).split(' ');
+        let lineas = [];
+        let lineaActual = '';
+
+        palabras.forEach(palabra => {
+            if ((lineaActual + ' ' + palabra).trim().length <= anchoMax) {
+                lineaActual = (lineaActual + ' ' + palabra).trim();
+            } else {
+                if (lineaActual) lineas.push(lineaActual);
+                lineaActual = palabra;
+            }
+        });
+        if (lineaActual) lineas.push(lineaActual);
+        return lineas.join('\n');
+    }
+
+    // -------------------- GENERADOR DE TICKET ESC/POS (CORREGIDO) --------------------
+    function generarBufferTicket(datosServidor) {
+        const { venta, detalles, cliente, configTicket } = datosServidor;
         const col = CONFIG.columnas;
         const encoder = new TextEncoder();
         let lines = [];
+
+        // Extraer datos de venta
+        const numeroTicket = venta.numero_ticket || 0;
+        const fechaFormateada = venta.fecha_formateada || '';
+        const totalUsd = venta.total_usd || 0;
+        const subtotalVes = venta.subtotal_ves || 0;
+        const totalVes = venta.total_ves || 0;
+        const metodoPago = venta.metodo_pago || 'Efectivo';
+        const tasaBcv = venta.tasa_bcv || 0;
+
+        // Extraer datos de cliente
+        const nombreCliente = cliente ? sanitizarPOS(cliente.nombre_completo || '') : 'Consumidor Final';
+        const cedulaCliente = cliente ? sanitizarPOS(cliente.cedula || '-') : '-';
+        const telefonoCliente = cliente ? sanitizarPOS(cliente.telefono || '') : '';
+        const direccionCliente = cliente ? sanitizarPOS(cliente.direccion || '') : '';
+
+        // Extraer configuración del ticket
+        const nombreTienda = configTicket.nombre_tienda || 'ELEMENTS STORE';
+        const telefonoTienda = configTicket.telefono_tienda || '';
+        const direccionTienda = configTicket.direccion_tienda || '';
+        const mostrarTelefono = configTicket.mostrar_telefono !== false;
+        const mostrarDireccionTienda = configTicket.mostrar_direccion_tienda !== false;
+        const mostrarDireccionCliente = configTicket.mostrar_direccion_cliente !== false;
+        const ivaPorcentaje = configTicket.porcentaje_iva || 0; // 🔥 CAMBIO: usar porcentaje_iva
+        const mensaje = configTicket.mensaje_agradecimiento || '¡Gracias por su compra!';
+        const urlWeb = configTicket.url_web || '';
+        const mostrarUrlWeb = configTicket.mostrar_url_web || false;
 
         // --- Inicialización ---
         lines.push(CONFIG.ESC + '@');                     // Resetear impresora
@@ -35,13 +102,13 @@
 
         // --- Encabezado (negrita, centrado) ---
         lines.push(CONFIG.ESC + 'E\x01');                // Negrita ON
-        lines.push(centrarTexto(configTicket.tiendaNombre || 'ELEMENTS STORE', col));
+        lines.push(centrarTexto(sanitizarPOS(nombreTienda), col));
         lines.push(CONFIG.ESC + 'E\x00');                // Negrita OFF
-        if (configTicket.mostrarTelefono && configTicket.telefonoTienda) {
-            lines.push(centrarTexto(configTicket.telefonoTienda, col));
+        if (mostrarTelefono && telefonoTienda) {
+            lines.push(centrarTexto(sanitizarPOS(telefonoTienda), col));
         }
-        if (configTicket.mostrarDireccionTienda && configTicket.direccionTienda) {
-            lines.push(centrarTexto(configTicket.direccionTienda, col));
+        if (mostrarDireccionTienda && direccionTienda) {
+            lines.push(centrarTexto(sanitizarPOS(direccionTienda), col));
         }
         lines.push(separador(col, '-'));
 
@@ -49,19 +116,18 @@
         lines.push(CONFIG.ESC + 'E\x01');
         lines.push(centrarTexto(`NOTA DE ENTREGA No: ${String(numeroTicket).padStart(5, '0')}`, col));
         lines.push(CONFIG.ESC + 'E\x00');
-        lines.push(centrarTexto(`Fecha: ${fecha}`, col));
+        lines.push(centrarTexto(`Fecha: ${fechaFormateada}`, col));
         lines.push(separador(col, '-'));
 
         // --- Cliente (alineación izquierda) ---
         lines.push(CONFIG.ESC + 'a\x00');                // Izquierda
-        const nombreCliente = cliente ? `${cliente.nombre} ${cliente.apellido}`.trim() : 'Consumidor Final';
         lines.push(`Cliente: ${nombreCliente}`);
-        lines.push(`Cédula: ${cliente ? cliente.cedula : '-'}`);
-        if (cliente && cliente.telefono) {
-            lines.push(`Teléfono: ${cliente.telefono}`);
+        lines.push(`Cedula: ${cedulaCliente}`);
+        if (telefonoCliente) {
+            lines.push(`Telefono: ${telefonoCliente}`);
         }
-        if (cliente && cliente.direccion && configTicket.mostrarDireccionCliente) {
-            lines.push(`Dirección: ${cliente.direccion}`);
+        if (direccionCliente && mostrarDireccionCliente) {
+            lines.push(`Direccion: ${direccionCliente}`);
         }
         lines.push(separador(col, '-'));
 
@@ -72,16 +138,19 @@
         lines.push(separador(col, '-'));
 
         // --- Productos (formato 2 líneas) ---
-        carrito.forEach(item => {
-            const nombre = item.nombre || 'Producto eliminado';
-            const descuento = item.descuento || 0;
-            const nombreConOferta = descuento > 0 ? `${nombre} (${descuento}% off)` : nombre;
-            const precioUnitario = item.precio;
-            const cantidad = item.cantidad;
-            const subtotal = precioUnitario * cantidad;
+        detalles.forEach(item => {
+            let nombre = sanitizarPOS(item.nombre_producto || 'Producto eliminado');
+            const descuento = item.descuento_porcentaje || 0;
+            // 🔥 Agregar indicador de descuento si existe
+            if (descuento > 0) {
+                nombre += ` (${descuento}% off)`;
+            }
+            const precioUnitario = item.precio_unitario_efectivo_usd || 0;
+            const cantidad = item.cantidad || 0;
+            const subtotal = item.total_linea_usd || 0;
 
             // Línea 1: nombre
-            lines.push(nombreConOferta);
+            lines.push(nombre);
 
             // Línea 2: cantidad, precio unitario y total alineado a la derecha
             const detalle = `${cantidad}x @ $${precioUnitario.toFixed(2)}`;
@@ -91,38 +160,45 @@
 
         lines.push(separador(col, '-'));
 
-        // --- Totales ---
+        // --- Totales USD ---
         lines.push(CONFIG.ESC + 'E\x01');
         lines.push(alinearIzquierdaDerecha('TOTAL USD:', `$${totalUsd.toFixed(2)}`, col));
         lines.push(CONFIG.ESC + 'E\x00');
         lines.push(separador(col, '-'));
 
-        // --- Subtotales en VES ---
-        lines.push(alinearIzquierdaDerecha('Tasa BCV:', `Bs ${tasa.toFixed(2)}`, col));
-        const subtotalVesStr = formatearNumeroVES(subtotalVes);
-        lines.push(alinearIzquierdaDerecha('SUBTOTAL VES:', `Bs ${subtotalVesStr}`, col));
+        // --- Totales VES con IVA (CORREGIDO) ---
+        lines.push(alinearIzquierdaDerecha('Tasa BCV:', `Bs ${tasaBcv.toFixed(2)}`, col));
+        lines.push(alinearIzquierdaDerecha('SUBTOTAL VES:', `Bs ${formatearNumeroVES(subtotalVes)}`, col));
 
-        if (configTicket.ivaPorcentaje > 0) {
-            const ivaMonto = subtotalVes * (configTicket.ivaPorcentaje / 100);
-            const totalVes = subtotalVes + ivaMonto;
-            lines.push(alinearIzquierdaDerecha(`IVA (${configTicket.ivaPorcentaje}%):`, `Bs ${formatearNumeroVES(ivaMonto)}`, col));
+        // 🔥 DESGLOSE DINÁMICO DE IVA (solo si > 0%)
+        if (ivaPorcentaje > 0) {
+            const ivaMonto = subtotalVes * (ivaPorcentaje / 100);
+            const totalConIva = subtotalVes + ivaMonto;
+            lines.push(alinearIzquierdaDerecha(`IVA (${ivaPorcentaje}%):`, `Bs ${formatearNumeroVES(ivaMonto)}`, col));
+            lines.push(CONFIG.ESC + 'E\x01');
+            lines.push(alinearIzquierdaDerecha('TOTAL VES:', `Bs ${formatearNumeroVES(totalConIva)}`, col));
+            lines.push(CONFIG.ESC + 'E\x00');
+        } else {
+            // Sin IVA: solo total
             lines.push(CONFIG.ESC + 'E\x01');
             lines.push(alinearIzquierdaDerecha('TOTAL VES:', `Bs ${formatearNumeroVES(totalVes)}`, col));
             lines.push(CONFIG.ESC + 'E\x00');
-        } else {
-            lines.push(CONFIG.ESC + 'E\x01');
-            lines.push(alinearIzquierdaDerecha('TOTAL VES:', `Bs ${formatearNumeroVES(subtotalVes)}`, col));
-            lines.push(CONFIG.ESC + 'E\x00');
         }
 
-        lines.push(alinearIzquierdaDerecha('Método Pago:', metodoPago, col));
+        lines.push(alinearIzquierdaDerecha('Metodo Pago:', sanitizarPOS(metodoPago), col));
         lines.push(separador(col, '-'));
 
-        // --- Pie de página (centrado) ---
+        // --- Pie de página (centrado) con word wrap ---
         lines.push(CONFIG.ESC + 'a\x01');
-        lines.push(configTicket.mensaje || '¡Gracias por su compra!');
-        if (configTicket.url) {
-            lines.push(configTicket.url);
+        if (mensaje) {
+            const mensajeFormateado = formatearPalabrasPOS(mensaje, col);
+            const lineasMensaje = mensajeFormateado.split('\n');
+            lineasMensaje.forEach(linea => {
+                lines.push(linea);
+            });
+        }
+        if (mostrarUrlWeb && urlWeb && urlWeb.trim() !== '') {
+            lines.push(sanitizarPOS(urlWeb.trim()));
         }
 
         // --- Avanzar y cortar papel ---
@@ -193,24 +269,25 @@
         }
     }
 
-    // -------------------- FUNCIÓN PRINCIPAL EXPUESTA --------------------
-    window.imprimirTicketUSB = async function(datos) {
-        if (!datos.carrito || datos.carrito.length === 0) {
-            alert('No hay productos en el carrito para imprimir');
+    // -------------------- FUNCIÓN PRINCIPAL EXPUESTA (CORREGIDA) --------------------
+    window.imprimirTicketUSB = async function(datosServidor) {
+        // Verificar que lleguen los datos correctos
+        if (!datosServidor || !datosServidor.detalles || datosServidor.detalles.length === 0) {
+            alert('No hay datos del ticket para imprimir');
             return;
         }
 
         // Verificar compatibilidad
         if (!('usb' in navigator)) {
             alert('❌ Tu navegador no soporta WebUSB.\nUsa Chrome/Edge 89+.\n\nSe usará la impresión HTML alternativa.');
-            if (window.imprimirNotaEntrega && datos.ventaId) {
-                window.imprimirNotaEntrega(datos.ventaId);
+            if (window.imprimirNotaEntrega && datosServidor.venta && datosServidor.venta.id) {
+                window.imprimirNotaEntrega(datosServidor.venta.id);
             }
             return;
         }
 
         try {
-            const buffer = generarBufferTicket(datos);
+            const buffer = generarBufferTicket(datosServidor);
             const resultado = await enviarPorUSB(buffer);
             if (resultado.success) {
                 alert('✅ Ticket enviado a la impresora por USB.');
@@ -218,8 +295,8 @@
         } catch (err) {
             alert('❌ Error al imprimir: ' + err.message);
             if (confirm('Falló la impresión por USB. ¿Desea intentar con la impresión HTML?')) {
-                if (window.imprimirNotaEntrega && datos.ventaId) {
-                    window.imprimirNotaEntrega(datos.ventaId);
+                if (window.imprimirNotaEntrega && datosServidor.venta && datosServidor.venta.id) {
+                    window.imprimirNotaEntrega(datosServidor.venta.id);
                 }
             }
         }
