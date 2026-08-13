@@ -441,7 +441,7 @@ document.addEventListener('DOMContentLoaded', function() {
         sessionStorage.setItem('factorAjuste', factorAjuste);
     }
 
-    // ---------- RENDERIZAR CARRITO (CORREGIDO: INPUT EN CANTIDAD Y DESCUENTO) ----------
+    // ---------- RENDERIZAR CARRITO ----------
     function renderCarrito() {
         carritoItems.innerHTML = '';
         if (carrito.length === 0) {
@@ -484,7 +484,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
         totalCarrito.textContent = `$${formatearMonto(total)}`;
 
-        // Cantidad: evento INPUT
         document.querySelectorAll('.cantidad-item').forEach(input => {
             input.addEventListener('input', function() {
                 const index = parseInt(this.dataset.index);
@@ -498,7 +497,6 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
 
-        // Checkbox oferta: evento INPUT
         document.querySelectorAll('.oferta-checkbox').forEach(chk => {
             chk.addEventListener('input', function() {
                 const index = parseInt(this.dataset.index);
@@ -514,7 +512,6 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
 
-        // Descuento: evento INPUT actualiza en tiempo real
         document.querySelectorAll('.descuento-input').forEach(input => {
             input.addEventListener('input', function() {
                 const index = parseInt(this.dataset.index);
@@ -626,7 +623,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // ---------- TICKET VIRTUAL (CORREGIDO: INSERCIÓN DE IVA ROBUSTA) ----------
+    // ---------- TICKET VIRTUAL (CORREGIDO: IVA EN VES) ----------
     function actualizarTicket() {
         controlarVisibilidadSubtotal();
 
@@ -740,7 +737,6 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
-        // 🔥 CÁLCULO DE SUBTOTAL VES Y TOTAL VES CON IVA
         if (carrito.length > 0) {
             let subtotalUsdOriginal = carrito.reduce((sum, item) => {
                 const precioConDesc = getPrecioConDescuento(item);
@@ -796,34 +792,22 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (ticketTotal) ticketTotal.textContent = `Bs ${formatearMonto(totalMostrar)}`;
             }
 
-            // 🔥 INSERTAR IVA EN VES DE FORMA ROBUSTA
+            // ============================================================
+            // 🔥 NUEVO: INSERTAR LÍNEA DEL IVA EN VES (CORREGIDO)
+            // ============================================================
             const ivaPorcentaje = configTicket.ivaPorcentaje || 0;
             const esMetodoVes = tasaSeleccionada !== 'usd' && tasaSeleccionada !== 'usd_personalizado';
 
-            // Buscar el contenedor de totales (el que está después de la tabla de productos)
-            // Usamos el elemento que contiene el total VES (ticketTotal) y su contenedor más cercano
-            let ivaElement = document.getElementById('ticket-iva-ves');
-            let totalContainer = ticketTotal.closest('.border-b-2.border-black.pb-2.mb-2');
-            if (!totalContainer) {
-                // Si no encuentra ese contenedor, buscar el padre directo de ticketTotal
-                totalContainer = ticketTotal.parentElement.parentElement;
-            }
-
-            if (totalContainer) {
+            // Buscar el elemento Subtotal VES para insertar después
+            const subtotalVesElement = document.getElementById('ticket-subtotal-ves');
+            if (subtotalVesElement) {
+                let ivaElement = document.getElementById('ticket-iva-ves');
                 if (!ivaElement) {
                     ivaElement = document.createElement('div');
                     ivaElement.id = 'ticket-iva-ves';
                     ivaElement.className = 'flex justify-between';
-                }
-
-                // Determinar dónde insertar: justo antes del total VES (ticketTotal)
-                const totalParent = ticketTotal.closest('.flex.justify-between.font-bold');
-                if (totalParent && totalParent.parentElement === totalContainer) {
-                    // Insertar antes del total
-                    totalContainer.insertBefore(ivaElement, totalParent);
-                } else {
-                    // Fallback: insertar al final del contenedor
-                    totalContainer.appendChild(ivaElement);
+                    // Insertar después de subtotalVesElement
+                    subtotalVesElement.parentNode.insertBefore(ivaElement, subtotalVesElement.nextSibling);
                 }
 
                 // Mostrar u ocultar según condiciones
@@ -835,6 +819,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     ivaElement.style.display = 'none';
                 }
             }
+            // ============================================================
+
         } else {
             if (ticketSubtotalUsd) ticketSubtotalUsd.textContent = '$0,00';
             if (ticketSubtotalVes) ticketSubtotalVes.textContent = 'Bs 0,00';
