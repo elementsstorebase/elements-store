@@ -245,7 +245,7 @@
 <script src="{{ url_for('static', filename='js/salida.js') }}"></script>
 
 <!-- ============================================================
-     MÓDULO DE IMPRESIÓN POR WebUSB (ESC/POS) - CORREGIDO CON WORD WRAP
+     MÓDULO DE IMPRESIÓN POR WebUSB (ESC/POS) - CORREGIDO CON WORD WRAP Y DESCUENTO
      ============================================================ -->
 <script>
     (function() {
@@ -280,7 +280,7 @@
                 .replace(/Ú/g, "U");
         }
 
-        // -------------------- NUEVO: WORD WRAP (respeta palabras) --------------------
+        // -------------------- WORD WRAP (respeta palabras) --------------------
         function formatearPalabrasPOS(texto, anchoMax = 32) {
             if (!texto) return '';
             const palabras = sanitizarPOS(texto).split(' ');
@@ -355,7 +355,11 @@
             lines.push(separador(col, '-'));
 
             detalles.forEach(item => {
-                const nombre = sanitizarPOS(item.nombre_producto || 'Producto');
+                let nombre = sanitizarPOS(item.nombre_producto || 'Producto');
+                // 🔥 Agregar indicador de descuento si existe
+                if (item.descuento_porcentaje && item.descuento_porcentaje > 0) {
+                    nombre += ` (${item.descuento_porcentaje}% off)`;
+                }
                 const precio = item.precio_unitario_efectivo_usd || 0;
                 const cantidad = item.cantidad || 0;
                 const totalLinea = item.total_linea_usd || 0;
@@ -399,15 +403,12 @@
             // -------------------- PIE DE PÁGINA CON WORD WRAP --------------------
             lines.push(CONFIG.ESC + 'a\x01'); // centrar
             if (configTicket.mensaje_agradecimiento) {
-                // 🔥 Aplicamos word wrap al mensaje
                 const mensajeFormateado = formatearPalabrasPOS(configTicket.mensaje_agradecimiento, col);
-                // Dividimos las líneas resultantes y las agregamos una por una
                 const lineasMensaje = mensajeFormateado.split('\n');
                 lineasMensaje.forEach(linea => {
                     lines.push(linea);
                 });
             }
-            // Solo mostrar URL si está habilitada y no está vacía
             if (configTicket.mostrar_url_web && configTicket.url_web && configTicket.url_web.trim() !== '') {
                 lines.push(sanitizarPOS(configTicket.url_web.trim()));
             }

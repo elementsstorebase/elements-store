@@ -2525,7 +2525,8 @@ def registrar_venta():
             'nombre_producto': producto.nombre if producto else "Producto eliminado",
             'cantidad': det.cantidad,
             'precio_unitario_efectivo_usd': float(det.precio_unitario_usd),
-            'total_linea_usd': float(det.precio_unitario_usd * det.cantidad)
+            'total_linea_usd': float(det.precio_unitario_usd * det.cantidad),
+            'descuento_porcentaje': float(det.descuento_porcentaje or 0)  # 🔥 NUEVO
         })
 
     # Datos del cliente

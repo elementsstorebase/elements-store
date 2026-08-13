@@ -396,7 +396,7 @@ document.addEventListener('DOMContentLoaded', function() {
         return item.precio * (1 - descuento / 100);
     }
 
-    // ---------- RECALCULAR FACTOR DE AJUSTE (CORREGIDO) ----------
+    // ---------- RECALCULAR FACTOR DE AJUSTE ----------
     function recalcularFactorAjuste() {
         if (carrito.length === 0) {
             factorAjuste = 1;
@@ -430,7 +430,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 factorAjuste = 1;
             }
         } else if (tasaSeleccionada === 'bcv_eur') {
-            // 🔥 Ajuste para tasa BCV Euro: el precio en USD se multiplica por (tasaEur / tasaUsd)
             if (tasaUsd > 0 && tasaEur > 0) {
                 factorAjuste = tasaEur / tasaUsd;
             } else {
@@ -442,7 +441,7 @@ document.addEventListener('DOMContentLoaded', function() {
         sessionStorage.setItem('factorAjuste', factorAjuste);
     }
 
-    // ---------- RENDERIZAR CARRITO ----------
+    // ---------- RENDERIZAR CARRITO (CORREGIDO: INPUT EN CANTIDAD Y DESCUENTO) ----------
     function renderCarrito() {
         carritoItems.innerHTML = '';
         if (carrito.length === 0) {
@@ -485,22 +484,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
         totalCarrito.textContent = `$${formatearMonto(total)}`;
 
+        // 🔥 CANTIDAD: evento INPUT (antes era change)
         document.querySelectorAll('.cantidad-item').forEach(input => {
-            input.addEventListener('change', function() {
+            input.addEventListener('input', function() {
                 const index = parseInt(this.dataset.index);
-                const nuevaCant = parseInt(this.value) || 1;
-                if (nuevaCant > 0) {
-                    carrito[index].cantidad = nuevaCant;
-                    recalcularFactorAjuste();
-                    renderCarrito();
-                    actualizarTicket();
-                    guardarEstado();
-                }
+                let nuevaCant = parseInt(this.value) || 1;
+                if (nuevaCant < 1) nuevaCant = 1;
+                carrito[index].cantidad = nuevaCant;
+                recalcularFactorAjuste();
+                renderCarrito();
+                actualizarTicket();
+                guardarEstado();
             });
         });
 
+        // 🔥 CHECKBOX OFERTA: evento INPUT (antes era change)
         document.querySelectorAll('.oferta-checkbox').forEach(chk => {
-            chk.addEventListener('change', function() {
+            chk.addEventListener('input', function() {
                 const index = parseInt(this.dataset.index);
                 const estaActiva = this.checked;
                 carrito[index].ofertaActiva = estaActiva;
@@ -514,6 +514,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
 
+        // 🔥 DESCUENTO: evento INPUT ahora actualiza en tiempo real
         document.querySelectorAll('.descuento-input').forEach(input => {
             input.addEventListener('input', function() {
                 const index = parseInt(this.dataset.index);
@@ -523,7 +524,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 carrito[index].descuento = valor;
                 if (valor > 0 && !carrito[index].ofertaActiva) {
                     carrito[index].ofertaActiva = true;
+                    // Actualizar el checkbox visualmente
+                    const chk = this.closest('tr').querySelector('.oferta-checkbox');
+                    if (chk) chk.checked = true;
                 }
+                // 🔥 ACTUALIZAR VISTA INMEDIATAMENTE
+                renderCarrito();
+                recalcularFactorAjuste();
+                actualizarTicket();
                 guardarEstado();
             });
 
@@ -655,7 +663,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     ticketTasa.style.display = 'inline';
                 }
                 
-                // Ocultar fila del IVA si carrito vacío
                 const ivaElement = document.getElementById('ticket-iva-ves');
                 if (ivaElement) ivaElement.style.display = 'none';
                 return;
@@ -833,7 +840,6 @@ document.addEventListener('DOMContentLoaded', function() {
             if (ticketSubtotalVes) ticketSubtotalVes.textContent = 'Bs 0,00';
             if (ticketTotal) ticketTotal.textContent = '$0,00';
             
-            // Ocultar fila del IVA
             const ivaElement = document.getElementById('ticket-iva-ves');
             if (ivaElement) ivaElement.style.display = 'none';
         }
@@ -893,22 +899,17 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         const url = `/ventas/ticket/${ventaId}`;
-        // Abrir en una nueva ventana con tamaño ajustado al ancho del ticket (58mm ~ 400px)
-        // y sin barras de herramientas para evitar distorsiones.
         const ventana = window.open(
             url,
             '_blank',
             'width=400,height=600,location=no,menubar=no,toolbar=no,scrollbars=no,resizable=yes'
         );
         if (ventana) {
-            // Enfoque en la nueva ventana
             ventana.focus();
-            // Pequeño recordatorio para el usuario (se muestra en consola y en la interfaz si se desea)
             console.info('📄 Para obtener la mejor calidad, en el diálogo de impresión:');
             console.info('   - Desactive "Encabezados y pies de página"');
             console.info('   - Ajuste los márgenes a "Ninguno"');
         } else {
-            // Si el navegador bloquea la ventana emergente, redirigir a la misma página
             window.location.href = url;
         }
     }
@@ -928,7 +929,6 @@ document.addEventListener('DOMContentLoaded', function() {
             metodo_cobro: tasaSeleccionada
         };
 
-        // 🔥 INCLUIR DATOS DEL CLIENTE ACTUALIZADOS
         if (clienteData) {
             data.cliente_nombre = clienteData.nombre;
             data.cliente_apellido = clienteData.apellido;
@@ -1122,7 +1122,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     numeroTicket = String(res.numero_ticket).padStart(5, '0');
                 }
                 btnGenerarTicket.textContent = 'Descargando ticket...';
-                // Descargar PNG
                 window.location.href = `/api/generar-ticket/${ventaId}`;
                 imprimirNotaEntrega(ventaId);
                 setTimeout(() => {
@@ -1139,7 +1138,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     });
 
-    // ---------- BOTÓN "GENERAR TICKET FÍSICO" (MEJORADO) ----------
+    // ---------- BOTÓN "GENERAR TICKET FÍSICO" ----------
     btnGenerarTicketFisico.addEventListener('click', function() {
         if (carrito.length === 0) {
             alert('No hay productos en el carrito para generar un ticket físico');
@@ -1166,7 +1165,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Función auxiliar para procesar venta con impresión automática (backend)
     function procesarVentaConImpresion() {
         btnGenerarTicketFisico.textContent = 'Procesando...';
         btnGenerarTicketFisico.disabled = true;
@@ -1265,7 +1263,6 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     }
 
-    // Función auxiliar para procesar venta sin impresión (cuando el usuario cancela la configuración)
     function procesarVentaSinImpresion() {
         btnGenerarTicketFisico.textContent = 'Procesando...';
         btnGenerarTicketFisico.disabled = true;
@@ -1514,10 +1511,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }, 60000);
 
     // ==================================================================
-    //  INTEGRACIÓN CON IMPRESIÓN POR WEBUSB (CORREGIDO)
+    //  INTEGRACIÓN CON IMPRESIÓN POR WEBUSB
     // ==================================================================
 
-    // Función para sanitizar texto para impresoras POS (elimina acentos, eñes, caracteres especiales)
     function sanitizarPOS(texto) {
         if (!texto) return '';
         return texto.toString()
@@ -1537,7 +1533,6 @@ document.addEventListener('DOMContentLoaded', function() {
             .replace(/Ú/g, "U");
     }
 
-    // Verificar compatibilidad y agregar botón dinámicamente
     function agregarBotonUSB() {
         if (!('usb' in navigator)) return;
 
@@ -1567,12 +1562,10 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         btn.addEventListener('click', async function() {
-            // Deshabilitar botón para evitar doble clic
             btn.disabled = true;
             btn.innerHTML = '⏳ Procesando venta...';
 
             try {
-                // 1. Obtener datos del cliente y carrito
                 const clienteData = obtenerDatosCliente();
                 if (!clienteData.nombre || !clienteData.apellido || !clienteData.cedula) {
                     alert('Nombre, apellido y cédula son obligatorios');
@@ -1608,7 +1601,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }
 
-                // 2. Obtener o crear cliente
                 let clienteId = null;
                 const clientesResp = await fetch(`/api/clientes?cedula=${encodeURIComponent(clienteData.cedula)}`);
                 const clientes = await clientesResp.json();
@@ -1624,7 +1616,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     clienteId = nuevoCliente.id;
                 }
 
-                // 3. Preparar datos de la venta
                 const items = carrito.map(item => ({
                     producto_id: item.id,
                     cantidad: item.cantidad,
@@ -1649,7 +1640,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     data.total_cobro = parseFloat(usdPersonalizadoInput.value) || 0;
                 }
 
-                // 4. Registrar la venta en el servidor (ESPERAR RESPUESTA)
                 const ventaResp = await fetch('/api/ventas', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1662,22 +1652,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
 
                 const ventaData = await ventaResp.json();
-
-                // 5. Extraer datos de la respuesta del servidor
                 const { venta, detalles, cliente, config_ticket } = ventaData;
 
-                // 6. Llamar a la función de impresión WebUSB con los datos del servidor
                 if (typeof window.imprimirTicketUSB === 'function') {
-                    // Actualizar el ticket virtual con el número real
                     if (venta.numero_ticket) {
                         numeroTicket = String(venta.numero_ticket).padStart(5, '0');
                         if (ticketNumero) ticketNumero.textContent = numeroTicket;
                     }
 
-                    // Mostrar mensaje de éxito antes de imprimir
                     alert('✅ Venta registrada exitosamente. Enviando ticket a la impresora...');
-
-                    // Llamar a la impresión con los datos del servidor
                     await window.imprimirTicketUSB({
                         venta: venta,
                         detalles: detalles,
@@ -1685,7 +1668,6 @@ document.addEventListener('DOMContentLoaded', function() {
                         configTicket: config_ticket
                     });
 
-                    // Limpiar venta después de imprimir
                     limpiarVenta();
                 } else {
                     alert('❌ Módulo de impresión USB no cargado. El ticket se generó pero no se imprimió.');
