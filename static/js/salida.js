@@ -744,6 +744,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 tasaAplicada = tasaPersonalizada;
                 break;
             case 'bs_personalizado':
+                // El total en Bs = subtotalUsd * tasaUsd (con descuentos aplicados)
                 subtotalVes = subtotalUsd * tasaUsd;
                 totalMostrar = subtotalUsd * tasaUsd;
                 simbolo = 'Bs ';
