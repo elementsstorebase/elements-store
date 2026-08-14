@@ -1804,21 +1804,76 @@ document.addEventListener('DOMContentLoaded', function() {
                     throw new Error(errData.error || 'Error al registrar la venta');
                 }
 
+                // 🔥 CORRECCIÓN: Obtener el ID de la venta
                 const ventaData = await ventaResp.json();
-                const { venta, detalles, cliente, config_ticket } = ventaData;
+                const ventaId = ventaData.venta_id;
+
+                if (!ventaId) {
+                    throw new Error('No se pudo obtener el ID de la venta');
+                }
+
+                // 🔥 Obtener el detalle completo de la venta
+                const detalleResp = await fetch(`/api/ventas/${ventaId}`);
+                if (!detalleResp.ok) {
+                    throw new Error('Error al obtener el detalle de la venta');
+                }
+                const detalleData = await detalleResp.json();
+
+                // 🔥 Obtener la configuración del ticket
+                const configResp = await fetch('/api/config/ticket');
+                const configTicketData = await configResp.json();
+
+                // Convertir los items del detalle al formato que espera imprimirTicketUSB
+                const detalles = detalleData.items.map(item => ({
+                    nombre_producto: item.producto_nombre,
+                    cantidad: item.cantidad,
+                    precio_unitario_efectivo_usd: item.precio_unitario_usd,
+                    total_linea_usd: item.subtotal_usd,
+                    descuento_porcentaje: item.descuento_porcentaje || 0
+                }));
+
+                const venta = {
+                    id: detalleData.id,
+                    numero_ticket: detalleData.numero_ticket,
+                    total_usd: detalleData.total_usd,
+                    subtotal_ves: detalleData.subtotal_ves,
+                    total_ves: detalleData.total_ves,
+                    tasa_bcv: detalleData.tasa_aplicada || tasaUsd,
+                    metodo_pago: detalleData.metodo_pago,
+                    fecha_formateada: detalleData.fecha
+                };
+
+                const cliente = {
+                    nombre_completo: detalleData.cliente,
+                    cedula: detalleData.cedula,
+                    telefono: detalleData.telefono,
+                    direccion: detalleData.direccion
+                };
+
+                // Configuración del ticket (mapa de nombres)
+                const configTicketMapped = {
+                    nombre_tienda: configTicketData.ticket_tienda_nombre || 'ELEMENTS STORE',
+                    telefono_tienda: configTicketData.ticket_telefono_tienda || '0412-1234567',
+                    direccion_tienda: configTicketData.ticket_direccion_tienda || 'Calle Principal, Local 1, Ciudad',
+                    mostrar_telefono: configTicketData.ticket_mostrar_telefono !== 'false',
+                    mostrar_direccion_tienda: configTicketData.ticket_mostrar_direccion_tienda !== 'false',
+                    mostrar_direccion_cliente: configTicketData.ticket_mostrar_direccion_cliente !== 'false',
+                    mostrar_url_web: true,
+                    url_web: configTicketData.ticket_url || 'www.elementsstore.com',
+                    mensaje_agradecimiento: configTicketData.ticket_mensaje || '¡Gracias por su compra!',
+                    porcentaje_iva: parseFloat(configTicketData.ticket_iva_porcentaje) || 0
+                };
 
                 if (typeof window.imprimirTicketUSB === 'function') {
-                    if (venta.numero_ticket) {
-                        numeroTicket = String(venta.numero_ticket).padStart(5, '0');
-                        if (ticketNumero) ticketNumero.textContent = numeroTicket;
-                    }
+                    numeroTicket = String(venta.numero_ticket).padStart(5, '0');
+                    if (ticketNumero) ticketNumero.textContent = numeroTicket;
 
                     alert('✅ Venta registrada exitosamente. Enviando ticket a la impresora...');
                     await window.imprimirTicketUSB({
                         venta: venta,
                         detalles: detalles,
                         cliente: cliente,
-                        configTicket: config_ticket
+                        configTicket: configTicketMapped
                     });
 
                     limpiarVenta();
