@@ -305,19 +305,56 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // ---------- ELIMINAR PRODUCTO ----------
     window.eliminarProducto = function(id) {
-        if (!confirm('¿Estás seguro de eliminar este producto? Esta acción no se puede deshacer.')) return;
+        // Primero se consulta QUÉ va a pasar, para avisar con claridad.
+        fetch(`/api/productos/${id}/previsualizar-eliminacion`, { credentials: 'same-origin' })
+            .then(function (r) {
+                const tipo = r.headers.get('Content-Type') || '';
+                if (tipo.indexOf('application/json') === -1) {
+                    throw new Error('El servidor respondió con un error ' + r.status + '.');
+                }
+                return r.json();
+            })
+            .then(function (info) {
+                if (info.error) throw new Error(info.motivo || info.error);
+
+                const nombre = (info.producto && info.producto.nombre) || 'este producto';
+
+                // Bloqueo único: alguien está pagando el producto ahora mismo.
+                if (!info.puede_eliminar) {
+                    const b = (info.bloqueos && info.bloqueos[0]) || {};
+                    alert('No se puede eliminar todavía\n\n' +
+                          (b.mensaje || 'Hay un apartado en curso.') +
+                          '\n\n💡 Finaliza o reintegra ese apartado y luego podrás eliminarlo.');
+                    return;
+                }
+
+                const c = info.se_conserva || {};
+                let msg = '¿Eliminar "' + nombre + '" del inventario?\n\n';
+                if (c.ventas > 0 || c.apartados_total > 0) {
+                    msg += 'Se CONSERVA en el historial:\n';
+                    if (c.ventas > 0) msg += '  • ' + c.ventas + ' línea(s) de venta en tickets ya emitidos\n';
+                    if (c.apartados_finalizados > 0) msg += '  • ' + c.apartados_finalizados + ' apartado(s) finalizados (Deudas Finalizadas)\n';
+                    msg += '\nEsos registros seguirán mostrando el nombre del producto.\n\n';
+                }
+                msg += 'DESAPARECE del inventario de forma permanente.\n\nEsta acción no se puede deshacer.';
+
+                if (!confirm(msg)) return;
+                ejecutarEliminacionProducto(id);
+            })
+            .catch(function (err) { alert('Error: ' + err.message); });
+    };
+
+    function ejecutarEliminacionProducto(id) {
         fetch(`/api/productos/${id}`, { method: 'DELETE', credentials: 'same-origin' })
             .then(function (r) {
-                // 🔥 CORREGIDO: si el servidor devuelve una página de error (HTML),
-                // r.json() lanzaba: Unexpected token '<', "<!doctype "...
-                // Ahora se comprueba el tipo de contenido antes de interpretarlo.
+                // 🔥 Si el servidor devuelve HTML, r.json() lanzaba:
+                // Unexpected token '<', "<!doctype "...  Ahora se comprueba antes.
                 const tipo = r.headers.get('Content-Type') || '';
                 if (tipo.indexOf('application/json') === -1) {
                     if (r.status === 401 || r.status === 403) {
                         throw new Error('Tu sesión expiró. Vuelve a iniciar sesión.');
                     }
-                    throw new Error('El servidor respondió con un error ' + r.status +
-                                    '. Vuelve a intentarlo; si persiste, avisa al técnico.');
+                    throw new Error('El servidor respondió con un error ' + r.status + '.');
                 }
                 return r.json().then(function (cuerpo) {
                     return { ok: r.ok, status: r.status, cuerpo: cuerpo };
@@ -325,18 +362,17 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .then(function (res) {
                 if (!res.ok) {
-                    // 409 = el producto tiene ventas o apartados: no se puede borrar.
                     let msg = res.cuerpo.error || 'No se pudo eliminar el producto';
                     if (res.cuerpo.motivo) msg += '\n\n' + res.cuerpo.motivo;
                     if (res.cuerpo.sugerencia) msg += '\n\n💡 ' + res.cuerpo.sugerencia;
                     alert(msg);
                     return;
                 }
-                alert(res.cuerpo.detalle || res.cuerpo.mensaje || 'Producto eliminado');
+                alert('✅ ' + (res.cuerpo.detalle || res.cuerpo.mensaje || 'Producto eliminado'));
                 cargarProductos();
             })
             .catch(function (err) { alert('Error: ' + err.message); });
-    };
+    }
 
     // ---------- HISTORIAL DE TASAS ----------
     window.verHistorial = function(productoId) {
