@@ -11,14 +11,14 @@
 
         <div class="flex items-center gap-2">
             <!-- 🔥 NUEVO: ayuda -->
-            <button type="button" onclick="abrirAyudaLogs()"
+            <button type="button" id="btn-ayuda-logs"
                     class="flex items-center gap-2 px-3 py-2 rounded-lg border border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition-colors text-sm font-medium"
                     title="¿Qué es esto?">
                 <i class="fas fa-question-circle"></i> Ayuda
             </button>
 
             <!-- 🔥 NUEVO: limpieza manual -->
-            <button type="button" onclick="abrirModalLimpiar()"
+            <button type="button" id="btn-limpiar-logs"
                     class="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors text-sm font-medium"
                     title="Eliminar registros del historial">
                 <i class="fas fa-trash-alt"></i> Limpiar historial
@@ -27,7 +27,7 @@
     </div>
 
     <!-- 🔥 NUEVO: resumen del historial -->
-    <div id="logs-resumen" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
         <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
             <p class="text-xs text-gray-500 uppercase tracking-wide">Registros</p>
             <p id="resumen-total" class="text-xl font-semibold text-gray-800">—</p>
@@ -65,7 +65,7 @@
 
 
 <!-- ============================================================ -->
-<!-- 🔥 NUEVO: MODAL DE LIMPIEZA DEL HISTORIAL -->
+<!-- 🔥 MODAL DE LIMPIEZA DEL HISTORIAL -->
 <!-- ============================================================ -->
 <div id="modal-limpiar-logs" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50 p-4">
     <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
@@ -73,7 +73,7 @@
             <h3 class="text-lg font-semibold text-gray-800">
                 <i class="fas fa-broom text-red-600 mr-2"></i>Limpiar historial de actividad
             </h3>
-            <button onclick="cerrarModalLimpiar()" class="text-gray-400 hover:text-gray-600" aria-label="Cerrar">
+            <button type="button" class="cerrar-limpiar text-gray-400 hover:text-gray-600" aria-label="Cerrar">
                 <i class="fas fa-times"></i>
             </button>
         </div>
@@ -88,7 +88,6 @@
             <div>
                 <p class="text-sm font-medium text-gray-700 mb-2">¿Qué quieres eliminar?</p>
                 <div class="space-y-2" id="opciones-limpieza">
-                    <!-- se llena desde logs.js con los conteos reales -->
                     <p class="text-gray-400 text-sm">
                         <i class="fas fa-spinner fa-spin mr-1"></i>Calculando...
                     </p>
@@ -116,11 +115,11 @@
         </div>
 
         <div class="px-5 py-4 border-t border-gray-200 flex gap-3">
-            <button onclick="cerrarModalLimpiar()"
-                    class="flex-1 px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium">
+            <button type="button"
+                    class="cerrar-limpiar flex-1 px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium">
                 Cancelar
             </button>
-            <button id="btn-confirmar-limpieza" onclick="confirmarLimpieza()"
+            <button type="button" id="btn-confirmar-limpieza"
                     class="flex-1 px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 font-medium opacity-50 cursor-not-allowed"
                     disabled>
                 <i class="fas fa-trash-alt mr-1"></i> Eliminar
@@ -131,7 +130,7 @@
 
 
 <!-- ============================================================ -->
-<!-- 🔥 NUEVO: AYUDA DEL MÓDULO -->
+<!-- 🔥 AYUDA DEL MÓDULO -->
 <!-- ============================================================ -->
 <div id="modal-ayuda-logs" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50 p-4">
     <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -139,7 +138,7 @@
             <h3 class="text-lg font-semibold text-gray-800">
                 <i class="fas fa-book-open text-indigo-600 mr-2"></i>Guía: Historial de Actividad
             </h3>
-            <button onclick="cerrarAyudaLogs()" class="text-gray-400 hover:text-gray-600" aria-label="Cerrar">
+            <button type="button" class="cerrar-ayuda text-gray-400 hover:text-gray-600" aria-label="Cerrar">
                 <i class="fas fa-times"></i>
             </button>
         </div>
@@ -214,13 +213,308 @@
         </div>
 
         <div class="px-5 py-4 border-t border-gray-200 sticky bottom-0 bg-white rounded-b-xl">
-            <button onclick="cerrarAyudaLogs()"
-                    class="w-full px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 font-medium">
+            <button type="button"
+                    class="cerrar-ayuda w-full px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 font-medium">
                 Entendido
             </button>
         </div>
     </div>
 </div>
 
-<script src="{{ url_for('static', filename='js/logs.js') }}"></script>
+
+<!-- ============================================================ -->
+<!-- 🔥 LÓGICA DEL MÓDULO — INCRUSTADA EN LA PÁGINA                -->
+<!--                                                               -->
+<!-- Va aquí dentro (y no en un .js aparte) a propósito: así la     -->
+<!-- pantalla funciona siempre, sin depender de que el archivo      -->
+<!-- externo se haya copiado en la carpeta correcta ni de que el    -->
+<!-- navegador tenga una versión vieja en caché.                    -->
+<!-- Los botones se enlazan con addEventListener, no con onclick.   -->
+<!-- ============================================================ -->
+<script>
+(function () {
+    'use strict';
+
+    function iniciarModuloLogs() {
+
+        // ---------- Utilidades ----------
+        function $(id) { return document.getElementById(id); }
+
+        function colorAccion(accion) {
+            var a = (accion || '').toUpperCase();
+            if (a.indexOf('ELIMINAD') >= 0 || a.indexOf('ANULAD') >= 0 || a.indexOf('PURGAD') >= 0) {
+                return 'bg-red-100 text-red-800';
+            }
+            if (a.indexOf('CREAD') >= 0 || a.indexOf('REGISTRAD') >= 0) {
+                return 'bg-green-100 text-green-800';
+            }
+            if (a.indexOf('REINTEGRAD') >= 0 || a.indexOf('MIGRACION') >= 0) {
+                return 'bg-amber-100 text-amber-800';
+            }
+            return 'bg-blue-100 text-blue-800';
+        }
+
+        function escapar(t) {
+            var d = document.createElement('div');
+            d.textContent = t == null ? '' : String(t);
+            return d.innerHTML;
+        }
+
+        // ---------- Tabla ----------
+        function cargarLogs() {
+            var tbody = $('tabla-logs');
+            if (!tbody) return;
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-gray-400">Cargando...</td></tr>';
+
+            fetch('/api/logs')
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    tbody.innerHTML = '';
+                    if (!data || data.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-gray-400">No hay registros en el historial</td></tr>';
+                        return;
+                    }
+                    data.forEach(function (log) {
+                        var tr = document.createElement('tr');
+                        tr.className = 'border-b border-gray-100';
+                        tr.innerHTML =
+                            '<td class="py-2">' + escapar(log.fecha) + '</td>' +
+                            '<td><span class="px-2 py-1 rounded-full text-xs ' + colorAccion(log.accion) + '">' + escapar(log.accion) + '</span></td>' +
+                            '<td>' + escapar(log.detalle) + '</td>' +
+                            '<td>' + escapar(log.usuario) + '</td>';
+                        tbody.appendChild(tr);
+                    });
+                })
+                .catch(function () {
+                    tbody.innerHTML = '<tr><td colspan="4" class="text-center py-4 text-red-400">Error al cargar el historial</td></tr>';
+                });
+        }
+
+        // ---------- Resumen ----------
+        function cargarEstadisticas() {
+            return fetch('/api/logs/estadisticas')
+                .then(function (r) { return r.json(); })
+                .then(function (info) {
+                    if (info.error) throw new Error(info.error);
+
+                    if ($('resumen-total')) {
+                        $('resumen-total').textContent = (info.total || 0).toLocaleString('es-VE');
+                    }
+                    if ($('resumen-peso')) {
+                        var kb = info.peso_estimado_kb || 0;
+                        $('resumen-peso').textContent = kb >= 1024 ? (kb / 1024).toFixed(1) + ' MB' : kb + ' KB';
+                    }
+                    if ($('resumen-antiguo')) {
+                        $('resumen-antiguo').textContent = info.mas_antiguo || 'Sin registros';
+                    }
+                    if ($('resumen-retencion')) {
+                        $('resumen-retencion').textContent = (info.retencion_automatica_dias || 90) + ' días';
+                    }
+                    return info;
+                })
+                .catch(function () { return null; });
+        }
+
+        // ---------- Modal de limpieza ----------
+        var opcionElegida = null;
+
+        function validarConfirmacion() {
+            var btn = $('btn-confirmar-limpieza');
+            var campo = $('input-confirmacion');
+            if (!btn || !campo) return;
+            var ok = (campo.value || '').trim().toUpperCase() === 'ELIMINAR';
+            btn.disabled = !ok;
+            btn.classList.toggle('opacity-50', !ok);
+            btn.classList.toggle('cursor-not-allowed', !ok);
+        }
+
+        function abrirModalLimpiar() {
+            opcionElegida = null;
+            var modal = $('modal-limpiar-logs');
+            var cont = $('opciones-limpieza');
+            var btn = $('btn-confirmar-limpieza');
+            if (!modal) return;
+
+            $('bloque-confirmacion-total').classList.add('hidden');
+            $('input-confirmacion').value = '';
+            btn.disabled = true;
+            btn.classList.add('opacity-50', 'cursor-not-allowed');
+            cont.innerHTML = '<p class="text-gray-400 text-sm"><i class="fas fa-spinner fa-spin mr-1"></i>Calculando...</p>';
+            modal.classList.remove('hidden');
+
+            cargarEstadisticas().then(function (info) {
+                if (!info) {
+                    cont.innerHTML = '<p class="text-red-600 text-sm">No se pudieron cargar los datos.</p>';
+                    return;
+                }
+                var total = info.total || 0;
+                if (total === 0) {
+                    cont.innerHTML = '<p class="text-gray-500 text-sm">El historial ya está vacío. No hay nada que borrar.</p>';
+                    return;
+                }
+
+                var porDias = info.antiguos_por_dias || {};
+                var opciones = [
+                    { d: 7,   txt: 'Más de 7 días' },
+                    { d: 30,  txt: 'Más de 30 días' },
+                    { d: 90,  txt: 'Más de 90 días' },
+                    { d: 180, txt: 'Más de 6 meses' },
+                    { d: 365, txt: 'Más de 1 año' }
+                ];
+                var html = '';
+                opciones.forEach(function (op) {
+                    var n = porDias[String(op.d)] || 0;
+                    var off = n === 0;
+                    html +=
+                        '<label class="flex items-center gap-3 p-2 rounded-lg border ' +
+                        (off ? 'border-gray-100 bg-gray-50 opacity-60 cursor-not-allowed'
+                             : 'border-gray-200 hover:bg-gray-50 cursor-pointer') + '">' +
+                        '<input type="radio" name="opcion-limpieza" value="' + op.d + '"' + (off ? ' disabled' : '') +
+                        ' class="text-red-600 focus:ring-red-500">' +
+                        '<span class="flex-1 text-sm text-gray-800">' + op.txt + '</span>' +
+                        '<span class="text-xs font-medium ' + (n > 0 ? 'text-red-600' : 'text-gray-400') + '">' +
+                        n + ' registro' + (n === 1 ? '' : 's') + '</span></label>';
+                });
+                html +=
+                    '<label class="flex items-center gap-3 p-2 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 cursor-pointer mt-3">' +
+                    '<input type="radio" name="opcion-limpieza" value="TODO" class="text-red-600 focus:ring-red-500">' +
+                    '<span class="flex-1 text-sm font-medium text-red-800">Borrar TODO el historial</span>' +
+                    '<span class="text-xs font-medium text-red-700">' + total + ' registro' + (total === 1 ? '' : 's') + '</span></label>';
+
+                cont.innerHTML = html;
+
+                Array.prototype.forEach.call(
+                    cont.querySelectorAll('input[name="opcion-limpieza"]'),
+                    function (radio) {
+                        radio.addEventListener('change', function () {
+                            opcionElegida = this.value;
+                            var esTotal = this.value === 'TODO';
+                            $('bloque-confirmacion-total').classList.toggle('hidden', !esTotal);
+                            if (esTotal) {
+                                validarConfirmacion();
+                            } else {
+                                btn.disabled = false;
+                                btn.classList.remove('opacity-50', 'cursor-not-allowed');
+                            }
+                        });
+                    }
+                );
+            });
+        }
+
+        function cerrarModalLimpiar() {
+            var m = $('modal-limpiar-logs');
+            if (m) m.classList.add('hidden');
+            opcionElegida = null;
+        }
+
+        function confirmarLimpieza() {
+            if (!opcionElegida) return;
+            var btn = $('btn-confirmar-limpieza');
+            var original = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Eliminando...';
+
+            var peticion;
+            if (opcionElegida === 'TODO') {
+                peticion = fetch('/api/logs/eliminar-todo', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ confirmacion: 'ELIMINAR' })
+                });
+            } else {
+                peticion = fetch('/api/mantenimiento/purgar-logs', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ dias: parseInt(opcionElegida, 10) })
+                });
+            }
+
+            peticion
+                .then(function (r) {
+                    return r.json().then(function (d) { return { ok: r.ok, d: d }; });
+                })
+                .then(function (res) {
+                    if (!res.ok) throw new Error(res.d.error || 'No se pudo completar la limpieza');
+                    alert('✅ ' + (res.d.mensaje || 'Historial limpiado'));
+                    cerrarModalLimpiar();
+                    cargarLogs();
+                    cargarEstadisticas();
+                })
+                .catch(function (err) { alert('❌ ' + err.message); })
+                .finally(function () {
+                    btn.disabled = false;
+                    btn.innerHTML = original;
+                });
+        }
+
+        // ---------- Ayuda ----------
+        function abrirAyuda() {
+            var m = $('modal-ayuda-logs');
+            if (m) m.classList.remove('hidden');
+        }
+        function cerrarAyuda() {
+            var m = $('modal-ayuda-logs');
+            if (m) m.classList.add('hidden');
+        }
+
+        // ---------- Enlazar los botones ----------
+        var btnAyuda = $('btn-ayuda-logs');
+        if (btnAyuda) btnAyuda.addEventListener('click', abrirAyuda);
+
+        var btnLimpiar = $('btn-limpiar-logs');
+        if (btnLimpiar) btnLimpiar.addEventListener('click', abrirModalLimpiar);
+
+        var btnConfirmar = $('btn-confirmar-limpieza');
+        if (btnConfirmar) btnConfirmar.addEventListener('click', confirmarLimpieza);
+
+        var campo = $('input-confirmacion');
+        if (campo) campo.addEventListener('input', validarConfirmacion);
+
+        Array.prototype.forEach.call(document.querySelectorAll('.cerrar-limpiar'), function (b) {
+            b.addEventListener('click', cerrarModalLimpiar);
+        });
+        Array.prototype.forEach.call(document.querySelectorAll('.cerrar-ayuda'), function (b) {
+            b.addEventListener('click', cerrarAyuda);
+        });
+
+        // Cerrar al pulsar fuera del recuadro
+        var mLimpiar = $('modal-limpiar-logs');
+        if (mLimpiar) {
+            mLimpiar.addEventListener('click', function (e) {
+                if (e.target === mLimpiar) cerrarModalLimpiar();
+            });
+        }
+        var mAyuda = $('modal-ayuda-logs');
+        if (mAyuda) {
+            mAyuda.addEventListener('click', function (e) {
+                if (e.target === mAyuda) cerrarAyuda();
+            });
+        }
+
+        // Cerrar con la tecla Escape
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') { cerrarModalLimpiar(); cerrarAyuda(); }
+        });
+
+        // Compatibilidad: si algo llama a estas funciones por nombre, existen
+        window.abrirAyudaLogs = abrirAyuda;
+        window.cerrarAyudaLogs = cerrarAyuda;
+        window.abrirModalLimpiar = abrirModalLimpiar;
+        window.cerrarModalLimpiar = cerrarModalLimpiar;
+        window.confirmarLimpieza = confirmarLimpieza;
+
+        // ---------- Inicio ----------
+        cargarLogs();
+        cargarEstadisticas();
+    }
+
+    // Arrancar tanto si el DOM ya está listo como si aún no
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', iniciarModuloLogs);
+    } else {
+        iniciarModuloLogs();
+    }
+})();
+</script>
 {% endblock %}
