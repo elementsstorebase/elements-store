@@ -8,9 +8,17 @@
             <h2 class="text-2xl font-semibold text-gray-800">Clientes Fijos</h2>
             <p class="text-sm text-gray-400">Gestión de clientes de confianza para apartados</p>
         </div>
-        <a href="/admin/clientes/crear" class="btn-primary flex items-center gap-2">
-            <i class="fas fa-user-plus"></i> Nuevo Cliente
-        </a>
+        <div class="flex items-center gap-2">
+            <!-- 🔥 NUEVO: manual de ayuda -->
+            <button type="button" onclick="abrirAyudaClientes()"
+                    class="flex items-center gap-2 px-3 py-2 rounded-lg border border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition-colors text-sm font-medium"
+                    title="Cómo funciona este módulo">
+                <i class="fas fa-question-circle"></i> Ayuda
+            </button>
+            <a href="/admin/clientes/crear" class="btn-primary flex items-center gap-2">
+                <i class="fas fa-user-plus"></i> Nuevo Cliente
+            </a>
+        </div>
     </div>
 
     <!-- Pestañas: Activos / Inactivos -->
@@ -87,4 +95,175 @@
 </div>
 
 <script src="{{ url_for('static', filename='js/clientes.js') }}"></script>
+
+<!-- ============================================================ -->
+<!-- 🔥 NUEVO: MODAL DE ELIMINACIÓN DEFINITIVA -->
+<!-- ============================================================ -->
+<div id="modal-eliminar-cliente" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50 p-4">
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div class="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+            <h3 class="text-lg font-semibold text-gray-800">
+                <i class="fas fa-user-minus text-red-600 mr-2"></i>Eliminar cliente
+            </h3>
+            <button onclick="cerrarModalEliminar()" class="text-gray-400 hover:text-gray-600" aria-label="Cerrar">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <div class="px-5 py-4">
+            <p class="text-gray-700 mb-3">
+                Vas a eliminar a <strong id="modal-eliminar-nombre" class="text-gray-900"></strong>.
+            </p>
+            <div id="modal-eliminar-cuerpo"></div>
+        </div>
+
+        <div class="px-5 py-4 border-t border-gray-200 flex gap-3">
+            <button onclick="cerrarModalEliminar()"
+                    class="flex-1 px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium">
+                Cancelar
+            </button>
+            <button id="modal-eliminar-confirmar" onclick="confirmarEliminar()"
+                    class="flex-1 px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 font-medium opacity-50 cursor-not-allowed"
+                    disabled>
+                <i class="fas fa-trash-alt mr-1"></i> Sí, eliminar
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 🔥 NUEVO: MANUAL DE AYUDA DEL MÓDULO -->
+<!-- ============================================================ -->
+<div id="modal-ayuda-clientes" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50 p-4">
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div class="px-5 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white rounded-t-xl">
+            <h3 class="text-lg font-semibold text-gray-800">
+                <i class="fas fa-book-open text-indigo-600 mr-2"></i>Guía: Clientes Fijos y Apartados
+            </h3>
+            <button onclick="cerrarAyudaClientes()" class="text-gray-400 hover:text-gray-600" aria-label="Cerrar">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <div class="px-5 py-4 space-y-5 text-sm text-gray-700">
+
+            <section>
+                <h4 class="font-semibold text-gray-900 mb-2">
+                    <i class="fas fa-users text-indigo-500 mr-1"></i>¿Para qué sirve esta pantalla?
+                </h4>
+                <p>
+                    Aquí se guardan los datos de las clientas que hacen <strong>apartados</strong>:
+                    nombre, cédula, teléfono y dirección. Así no hay que escribirlos de nuevo
+                    cada vez que apartan algo.
+                </p>
+            </section>
+
+            <section>
+                <h4 class="font-semibold text-gray-900 mb-2">
+                    <i class="fas fa-layer-group text-indigo-500 mr-1"></i>Las dos pestañas
+                </h4>
+                <ul class="space-y-2">
+                    <li>
+                        <strong class="text-gray-900">Activos:</strong> clientas que compran normalmente.
+                        Son las que aparecen al crear un apartado nuevo.
+                    </li>
+                    <li>
+                        <strong class="text-gray-900">Inactivos:</strong> clientas guardadas "en reposo".
+                        No aparecen en la lista principal, pero sus datos siguen ahí.
+                        Si vuelven, se pulsa <em>Reactivar</em> y regresan tal cual estaban.
+                    </li>
+                </ul>
+            </section>
+
+            <section class="border-l-4 border-amber-400 bg-amber-50 rounded-r-lg p-3">
+                <h4 class="font-semibold text-gray-900 mb-2">
+                    <i class="fas fa-user-slash text-amber-600 mr-1"></i>Desactivar vs. Eliminar
+                </h4>
+                <p class="mb-2">
+                    <strong>Desactivar</strong> es reversible: la clienta se aparta de la lista principal
+                    pero sus datos se conservan. Se usa cuando lleva tiempo sin venir y quizás vuelva.
+                </p>
+                <p>
+                    <strong>Eliminar</strong> es definitivo: borra su ficha para siempre.
+                    Se usa cuando ya se sabe que no va a volver y no tiene sentido guardar sus datos.
+                    Solo está disponible en la pestaña <em>Inactivos</em>, para que nunca se borre
+                    por accidente a alguien que está comprando.
+                </p>
+            </section>
+
+            <section class="border-l-4 border-green-400 bg-green-50 rounded-r-lg p-3">
+                <h4 class="font-semibold text-gray-900 mb-2">
+                    <i class="fas fa-shield-alt text-green-600 mr-1"></i>¿Se pierde el historial al eliminar?
+                </h4>
+                <p class="mb-2"><strong>No.</strong> Al crear un apartado, el sistema guarda una copia del
+                nombre y la cédula dentro de ese apartado. Es como escribirlos en el recibo:
+                aunque después se borre la ficha de la clienta, el recibo sigue diciendo de quién era.</p>
+                <p>Después de eliminar a una clienta se conservan:</p>
+                <ul class="list-disc ml-5 mt-1 space-y-1">
+                    <li>Los apartados finalizados, en <strong>Deudas Finalizadas</strong></li>
+                    <li>Las ventas y sus tickets, en <strong>Listado de Tickets</strong></li>
+                    <li>Los montos cobrados, en <strong>Finanzas</strong></li>
+                </ul>
+                <p class="mt-2">
+                    Ese historial <strong>solo</strong> se borra si se elimina expresamente
+                    desde Deudas Finalizadas. Nunca desaparece por eliminar a la clienta.
+                </p>
+            </section>
+
+            <section class="border-l-4 border-red-400 bg-red-50 rounded-r-lg p-3">
+                <h4 class="font-semibold text-gray-900 mb-2">
+                    <i class="fas fa-lock text-red-600 mr-1"></i>Cuando NO se deja eliminar
+                </h4>
+                <p>
+                    Si la clienta tiene un <strong>apartado activo con saldo pendiente</strong>,
+                    el sistema lo impide y avisa cuánto falta por pagar. Tiene un producto suyo
+                    guardado en el almacén: primero hay que cerrar ese asunto en
+                    <strong>Deudas Activas</strong> (finalizarlo si terminó de pagar, o reintegrarlo
+                    si ya no lo quiere) y después sí se puede eliminar.
+                </p>
+            </section>
+
+            <section>
+                <h4 class="font-semibold text-gray-900 mb-2">
+                    <i class="fas fa-rotate-left text-indigo-500 mr-1"></i>¿Qué hace el botón "Reintegrar"?
+                </h4>
+                <p class="mb-2">
+                    Está en <strong>Deudas Activas</strong> y sirve cuando una clienta se arrepiente
+                    del apartado. Deshace la operación completa:
+                </p>
+                <ul class="list-disc ml-5 space-y-1">
+                    <li>El producto <strong>vuelve al inventario</strong> y queda disponible para vender.</li>
+                    <li>El dinero abonado (el inicial y los abonos) <strong>deja de contar</strong> en Finanzas,
+                        porque esa venta nunca ocurrió.</li>
+                    <li>El apartado pasa a <strong>Deudas Finalizadas</strong> marcado como reintegrado,
+                        como constancia de lo que pasó.</li>
+                </ul>
+                <p class="mt-2 text-gray-600">
+                    Los montos reintegrados no se suman en ningún reporte:
+                    los totales de Finanzas reflejan solo dinero de ventas reales.
+                </p>
+            </section>
+
+            <section>
+                <h4 class="font-semibold text-gray-900 mb-2">
+                    <i class="fas fa-lightbulb text-indigo-500 mr-1"></i>Recomendación
+                </h4>
+                <p>
+                    Ante la duda, <strong>desactiva</strong> en lugar de eliminar.
+                    Desactivar siempre se puede deshacer; eliminar no.
+                    Un buen criterio es eliminar solo cuando la clienta lleva
+                    varios meses sin comprar y no tiene nada pendiente.
+                </p>
+            </section>
+        </div>
+
+        <div class="px-5 py-4 border-t border-gray-200 sticky bottom-0 bg-white rounded-b-xl">
+            <button onclick="cerrarAyudaClientes()"
+                    class="w-full px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 font-medium">
+                Entendido
+            </button>
+        </div>
+    </div>
+</div>
+
 {% endblock %}

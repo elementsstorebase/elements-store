@@ -1,6 +1,8 @@
 from flask import Flask, render_template, jsonify, request, send_file
 from models import db, Deuda  # 🔥 Importación explícita de Deuda
-from routes import main_bp, api_bp  # ❌ Eliminamos la importación de la migración
+from routes import main_bp, api_bp, migrar_apartados_y_pagos, limpieza_periodica_logs
+# 🔥 migrar_apartados_y_pagos: permite eliminar clientes conservando el histórico
+# 🔥 limpieza_periodica_logs: purga automática de la tabla 'logs'
 from utils import inicializar_datos_defecto, obtener_tasas_bcv, guardar_historial_tasas, obtener_tasa_personalizada
 import os
 import sys
@@ -68,6 +70,19 @@ app.config['TIMEZONE'] = 'America/Caracas'  # 🔥 AÑADIDO para referencia
 db.init_app(app)
 
 # Registrar blueprints
+# ============================================================
+# 🔥 LIMPIEZA AUTOMÁTICA DE LOGS
+# Se comprueba en cada petición pero solo actúa una vez cada 24 h;
+# el coste habitual es una comparación de fechas (microsegundos).
+# ============================================================
+@app.before_request
+def _hook_limpieza_logs():
+    try:
+        limpieza_periodica_logs()
+    except Exception as e:
+        print(f"⚠️ Limpieza de logs omitida: {e}")
+
+
 app.register_blueprint(main_bp)
 app.register_blueprint(api_bp, url_prefix='/api')
 
@@ -485,6 +500,11 @@ with app.app_context():
     
     # 🔥 MIGRACIÓN PRIORITARIA: agregar columna 'activo' en clientes
     migrar_columna_activo()
+
+    # 🔥 MIGRACIÓN: módulo de apartados (respaldo histórico + anulación de abonos).
+    # Va FUERA del bloque "if sqlite" para que también se aplique en Supabase.
+    print(">>> Ejecutando migración del módulo de apartados...")
+    migrar_apartados_y_pagos()
     
     # Solo ejecutar migraciones específicas de SQLite si se usa SQLite localmente
     if app.config['SQLALCHEMY_DATABASE_URI'].startswith('sqlite'):

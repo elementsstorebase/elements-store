@@ -16,6 +16,202 @@ import pytz
 import textwrap  # NUEVO: para manejo de líneas largas en tickets
 
 main_bp = Blueprint('main', __name__)
+
+# ============================================================
+# 🔥 MIGRACIÓN AUTOMÁTICA: MÓDULO APARTADOS / ELIMINACIÓN DE CLIENTES
+# Compatible con PostgreSQL (Supabase) y SQLite. Idempotente.
+# ============================================================
+def migrar_apartados_y_pagos():
+    """
+    Habilita eliminar clientes conservando el histórico:
+      1. apartados.cliente_nombre_hist / cedula_hist / telefono_hist
+      2. pagos_apartados.anulado / fecha_anulacion / motivo_anulacion
+      3. apartados.cliente_id: NOT NULL + CASCADE  ->  NULL + SET NULL
+    Además rellena el respaldo de los apartados ya existentes.
+    """
+    from sqlalchemy import inspect, text as _sql_text
+    try:
+        inspector = inspect(db.engine)
+        es_pg = db.engine.dialect.name == 'postgresql'
+
+        if not inspector.has_table('apartados'):
+            print("ℹ️ Tabla 'apartados' no existe todavía; db.create_all() la creará ya migrada.")
+            return
+
+        def _ejecutar(sql):
+            db.session.execute(_sql_text(sql))
+            db.session.commit()
+
+        # ---------- 1. Respaldo histórico en apartados ----------
+        cols_ap = [c['name'] for c in inspector.get_columns('apartados')]
+        for col, tipo in (('cliente_nombre_hist', 'VARCHAR(120)'),
+                          ('cliente_cedula_hist', 'VARCHAR(20)'),
+                          ('cliente_telefono_hist', 'VARCHAR(20)')):
+            if col not in cols_ap:
+                print(f"🔧 Agregando '{col}' a 'apartados'...")
+                _ejecutar(f"ALTER TABLE apartados ADD COLUMN {col} {tipo}")
+
+        # ---------- 2. Anulación en pagos_apartados ----------
+        if inspector.has_table('pagos_apartados'):
+            cols_pg = [c['name'] for c in inspector.get_columns('pagos_apartados')]
+            falso = 'FALSE' if es_pg else '0'
+            if 'anulado' not in cols_pg:
+                print("🔧 Agregando 'anulado' a 'pagos_apartados'...")
+                _ejecutar(f"ALTER TABLE pagos_apartados ADD COLUMN anulado BOOLEAN DEFAULT {falso}")
+                _ejecutar(f"UPDATE pagos_apartados SET anulado = {falso} WHERE anulado IS NULL")
+            if 'fecha_anulacion' not in cols_pg:
+                _ejecutar("ALTER TABLE pagos_apartados ADD COLUMN fecha_anulacion "
+                          + ('TIMESTAMP' if es_pg else 'DATETIME'))
+            if 'motivo_anulacion' not in cols_pg:
+                _ejecutar("ALTER TABLE pagos_apartados ADD COLUMN motivo_anulacion VARCHAR(255)")
+
+        # ---------- 3. Rellenar respaldo de apartados existentes ----------
+        pendientes = db.session.execute(_sql_text(
+            "SELECT COUNT(*) FROM apartados WHERE cliente_nombre_hist IS NULL AND cliente_id IS NOT NULL"
+        )).scalar()
+        if pendientes:
+            print(f"🔧 Rellenando respaldo histórico de {pendientes} apartado(s)...")
+            concat = ("TRIM(c.nombre || ' ' || c.apellido)" if not es_pg
+                      else "TRIM(CONCAT(c.nombre, ' ', c.apellido))")
+            db.session.execute(_sql_text(f"""
+                UPDATE apartados
+                   SET cliente_nombre_hist = (SELECT {concat} FROM clientes c WHERE c.id = apartados.cliente_id),
+                       cliente_cedula_hist = (SELECT c.cedula FROM clientes c WHERE c.id = apartados.cliente_id),
+                       cliente_telefono_hist = (SELECT c.telefono FROM clientes c WHERE c.id = apartados.cliente_id)
+                 WHERE cliente_nombre_hist IS NULL AND cliente_id IS NOT NULL
+            """))
+            db.session.commit()
+            print("✅ Respaldo histórico rellenado.")
+
+        # ---------- 4. cliente_id: NULL permitido + FK SET NULL ----------
+        if not es_pg:
+            # SQLite no permite quitar NOT NULL ni cambiar una FK con ALTER TABLE:
+            # hay que reconstruir la tabla. Se hace copiando los datos a una tabla
+            # nueva con el esquema correcto, dentro de una transacción.
+            # IMPORTANTE: inspector nuevo. El de arriba está cacheado y no ve
+            # las columnas recién añadidas; usarlo perdería el respaldo al copiar.
+            insp_fresco = inspect(db.engine)
+            col_cli = next((c for c in insp_fresco.get_columns('apartados')
+                            if c['name'] == 'cliente_id'), None)
+            if col_cli is not None and not col_cli.get('nullable', True):
+                print("🔧 [SQLite] Reconstruyendo 'apartados' para permitir cliente_id NULL...")
+                cols = [c['name'] for c in insp_fresco.get_columns('apartados')]
+                lista = ', '.join(cols)
+                db.session.execute(_sql_text("PRAGMA foreign_keys=OFF"))
+                db.session.execute(_sql_text("ALTER TABLE apartados RENAME TO apartados_old_mig"))
+                db.session.commit()
+                # Recrear con el esquema del modelo actual (cliente_id NULL + SET NULL)
+                Apartado.__table__.create(db.engine)
+                db.session.execute(_sql_text(
+                    f"INSERT INTO apartados ({lista}) SELECT {lista} FROM apartados_old_mig"))
+                db.session.execute(_sql_text("DROP TABLE apartados_old_mig"))
+                db.session.execute(_sql_text("PRAGMA foreign_keys=ON"))
+                db.session.commit()
+                print("✅ [SQLite] Tabla 'apartados' reconstruida.")
+
+        if es_pg:
+            col_cli = next((c for c in inspect(db.engine).get_columns('apartados')
+                            if c['name'] == 'cliente_id'), None)
+            if col_cli is not None and not col_cli.get('nullable', True):
+                print("🔧 Permitiendo NULL en apartados.cliente_id...")
+                _ejecutar("ALTER TABLE apartados ALTER COLUMN cliente_id DROP NOT NULL")
+
+            fk = next((f for f in inspect(db.engine).get_foreign_keys('apartados')
+                       if f.get('referred_table') == 'clientes'
+                       and 'cliente_id' in (f.get('constrained_columns') or [])), None)
+            if fk and fk.get('name'):
+                regla = ((fk.get('options') or {}).get('ondelete') or '').upper()
+                if regla != 'SET NULL':
+                    nombre_fk = fk['name']
+                    print(f"🔧 FK '{nombre_fk}': {regla or 'NO ACTION'} -> SET NULL")
+                    _ejecutar(f'ALTER TABLE apartados DROP CONSTRAINT "{nombre_fk}"')
+                    _ejecutar(f'ALTER TABLE apartados ADD CONSTRAINT "{nombre_fk}" '
+                              'FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE SET NULL')
+
+        # ---------- 5. Regularizar apartados YA reintegrados ----------
+        # Los reintegros hechos ANTES de este parche dejaron sus abonos activos
+        # (ese es el origen de los montos fantasma en Finanzas). Se anulan ahora.
+        reintegrados_sucios = db.session.execute(_sql_text("""
+            SELECT COUNT(*) FROM pagos_apartados p
+             JOIN apartados a ON a.id = p.apartado_id
+            WHERE a.estado = 'reintegrado'
+              AND (p.anulado IS NULL OR p.anulado = %s)
+        """ % ('FALSE' if es_pg else '0'))).scalar()
+
+        if reintegrados_sucios:
+            print(f"🔧 Regularizando {reintegrados_sucios} abono(s) de apartados ya reintegrados...")
+            db.session.execute(_sql_text("""
+                UPDATE pagos_apartados
+                   SET anulado = %s,
+                       motivo_anulacion = 'Regularización: apartado reintegrado antes de la actualización'
+                 WHERE apartado_id IN (SELECT id FROM apartados WHERE estado = 'reintegrado')
+                   AND (anulado IS NULL OR anulado = %s)
+            """ % ('TRUE' if es_pg else '1', 'FALSE' if es_pg else '0')))
+            db.session.commit()
+            db.session.add(Log(
+                accion='MIGRACION_ABONOS',
+                detalle=f'{reintegrados_sucios} abono(s) de apartados reintegrados fueron anulados '
+                        'para que dejen de sumar en los reportes de Finanzas.'))
+            db.session.commit()
+            print(f"✅ {reintegrados_sucios} abono(s) regularizados: ya no suman en Finanzas.")
+
+        print("✅ Migración del módulo de apartados completada.")
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"⚠️ Error en migrar_apartados_y_pagos(): {e}")
+        import traceback
+        traceback.print_exc()
+
+
+# ============================================================
+# 🔥 LIMPIEZA AUTOMÁTICA DE LOGS
+# La tabla 'logs' tiene 31 puntos de escritura y ninguna purga:
+# crece indefinidamente. Esto la mantiene acotada sin intervención.
+# ============================================================
+DIAS_RETENCION_LOGS = 90       # se conservan los últimos 90 días
+INTERVALO_LIMPIEZA_HORAS = 24  # se revisa una vez al día
+
+_ultima_limpieza_logs = None
+
+
+def purgar_logs_antiguos(dias=None, forzado=False):
+    """Borra los logs más antiguos que 'dias'. Devuelve cuántos borró."""
+    dias = dias or DIAS_RETENCION_LOGS
+    try:
+        limite = now_venezuela() - timedelta(days=dias)
+        borrados = Log.query.filter(Log.fecha < limite).delete(synchronize_session=False)
+        db.session.commit()
+        if borrados:
+            db.session.add(Log(
+                accion='LOGS_PURGADOS',
+                detalle=f'Limpieza {"manual" if forzado else "automática"}: {borrados} '
+                        f'registro(s) anteriores al {limite.strftime("%d/%m/%Y")} eliminados.'))
+            db.session.commit()
+            print(f"🧹 Logs purgados: {borrados} registro(s) con más de {dias} días.")
+        return borrados
+    except Exception as e:
+        db.session.rollback()
+        print(f"⚠️ Error al purgar logs: {e}")
+        return 0
+
+
+def limpieza_periodica_logs():
+    """
+    Se invoca en cada petición; solo actúa una vez cada 24 h.
+    Se usa este enfoque en vez de un hilo/scheduler porque en Render el plan
+    gratuito duerme el servicio: un temporizador en segundo plano no sobrevive
+    al reinicio, mientras que esto se dispara con el primer uso del día y no
+    consume nada mientras la app está inactiva.
+    """
+    global _ultima_limpieza_logs
+    ahora = now_venezuela()
+    if _ultima_limpieza_logs and (ahora - _ultima_limpieza_logs).total_seconds() < INTERVALO_LIMPIEZA_HORAS * 3600:
+        return
+    _ultima_limpieza_logs = ahora
+    purgar_logs_antiguos()
+
+
 api_bp = Blueprint('api', __name__)
 
 # ============================================================
@@ -2056,42 +2252,143 @@ def actualizar_cliente(id):
 @api_bp.route('/clientes/<int:id>', methods=['DELETE'])
 @login_required
 def eliminar_cliente(id):
+    """
+    🔥 ELIMINACIÓN REAL DEL CLIENTE (conservando el histórico).
+
+      - Si tiene apartados ACTIVOS con saldo pendiente -> se bloquea.
+      - Si no, el cliente se BORRA de la base de datos.
+      - Los apartados finalizados/reintegrados NO se borran: quedan en
+        Deudas Finalizadas con el nombre guardado como respaldo.
+      - Las ventas/tickets tampoco se borran (quedan sin cliente asociado).
+
+    Con ?modo=desactivar se conserva el comportamiento anterior.
+    """
     cliente = Cliente.query.get_or_404(id)
-    
-    # ============================================================
-    # 1. VALIDACIÓN: APARTADOS ACTIVOS CON SALDO PENDIENTE
-    # ============================================================
+    modo = (request.args.get('modo') or 'eliminar').lower()
+
+    # ---------- 1. Validación: apartados activos con saldo ----------
     apartados_activos = Apartado.query.filter_by(cliente_id=id, estado='activo').all()
     apartados_con_saldo = [a for a in apartados_activos if a.saldo_restante > 0]
-    
+
     if apartados_con_saldo:
-        detalles = []
-        for a in apartados_con_saldo:
-            detalles.append(f"#{a.id} (${a.saldo_restante:.2f} pendiente)")
+        detalles = [f"#{a.id} (${a.saldo_restante:.2f} pendiente)" for a in apartados_con_saldo]
         return jsonify({
-            'error': f'No se puede desactivar el cliente porque tiene apartados activos con saldo pendiente: {", ".join(detalles)}. '
-                     'Primero debe finalizar o cancelar estos apartados.'
+            'error': f'No se puede eliminar a {cliente.nombre} {cliente.apellido} porque tiene '
+                     f'apartado(s) activo(s) con saldo pendiente: {", ".join(detalles)}. '
+                     'Ve a Deudas Activas y finaliza o reintegra el apartado antes de eliminar al cliente.',
+            'motivo': 'apartados_activos',
+            'apartados': [{'id': a.id, 'saldo': round(a.saldo_restante, 2)} for a in apartados_con_saldo]
         }), 400
-    
-    # ============================================================
-    # 2. DESACTIVACIÓN LÓGICA (sin reasignación)
-    # ============================================================
+
+    # ---------- 2. Modo compatibilidad: desactivación lógica ----------
+    if modo == 'desactivar':
+        try:
+            cliente.activo = False
+            db.session.add(Log(accion='CLIENTE_DESACTIVADO',
+                               detalle=f'Cliente {cliente.nombre} {cliente.apellido} (ID {cliente.id}) desactivado.'))
+            db.session.commit()
+            return jsonify({'mensaje': 'Cliente desactivado correctamente (no se borraron datos históricos).'})
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': f'Error al desactivar el cliente: {str(e)}'}), 500
+
+    # ---------- 3. Eliminación real, preservando el histórico ----------
     try:
-        cliente.activo = False
+        nombre_completo = f"{cliente.nombre} {cliente.apellido}".strip()
+        cedula = cliente.cedula
+
+        # 3.1 Asegurar respaldo en TODOS sus apartados y desvincular.
+        #     No dependemos del ON DELETE del motor: lo hacemos explícito.
+        apartados_cliente = Apartado.query.filter_by(cliente_id=id).all()
+        for ap in apartados_cliente:
+            if not ap.cliente_nombre_hist:
+                ap.cliente_nombre_hist = nombre_completo
+            if not ap.cliente_cedula_hist:
+                ap.cliente_cedula_hist = cedula
+            if not ap.cliente_telefono_hist:
+                ap.cliente_telefono_hist = cliente.telefono
+            ap.cliente_id = None
+            db.session.add(ap)
+
+        # 3.2 Desvincular ventas para que los tickets sobrevivan.
+        ventas_cliente = Venta.query.filter_by(cliente_id=id).all()
+        for v in ventas_cliente:
+            v.cliente_id = None
+            db.session.add(v)
+
+        # 3.3 Desvincular créditos si los hubiera.
+        creditos_cliente = Credito.query.filter_by(cliente_id=id).all()
+        for c in creditos_cliente:
+            c.cliente_id = None
+            db.session.add(c)
+
+        db.session.flush()
+        db.session.delete(cliente)
+
+        db.session.add(Log(
+            accion='CLIENTE_ELIMINADO',
+            detalle=f'Cliente {nombre_completo} (C.I. {cedula}, ID {id}) eliminado permanentemente. '
+                    f'Histórico conservado: {len(apartados_cliente)} apartado(s), {len(ventas_cliente)} venta(s).'))
         db.session.commit()
-        
-        # Registrar log
-        log = Log(accion='CLIENTE_DESACTIVADO', detalle=f'Cliente {cliente.nombre} {cliente.apellido} (ID {cliente.id}) desactivado.')
-        db.session.add(log)
-        db.session.commit()
-        
-        return jsonify({'mensaje': 'Cliente desactivado correctamente (no se borraron datos históricos).'})
+
+        return jsonify({
+            'mensaje': f'Cliente {nombre_completo} eliminado correctamente.',
+            'historico_conservado': {
+                'apartados': len(apartados_cliente),
+                'ventas': len(ventas_cliente),
+                'creditos': len(creditos_cliente)
+            }
+        }), 200
+
     except Exception as e:
         db.session.rollback()
-        print(f"❌ Error al desactivar cliente {id}: {str(e)}")
+        print(f"❌ Error al eliminar cliente {id}: {str(e)}")
         import traceback
         traceback.print_exc()
-        return jsonify({'error': f'Error al desactivar el cliente: {str(e)}'}), 500
+        return jsonify({'error': f'Error al eliminar el cliente: {str(e)}'}), 500
+
+
+@api_bp.route('/clientes/<int:id>/previsualizar-eliminacion', methods=['GET'])
+@login_required
+def previsualizar_eliminacion_cliente(id):
+    """🔥 NUEVO: informa qué pasará ANTES de eliminar, para el diálogo de confirmación."""
+    cliente = Cliente.query.get_or_404(id)
+
+    activos = Apartado.query.filter_by(cliente_id=id, estado='activo').all()
+    activos_con_saldo = [a for a in activos if a.saldo_restante > 0]
+
+    return jsonify({
+        'cliente': {
+            'id': cliente.id,
+            'nombre': f"{cliente.nombre} {cliente.apellido}".strip(),
+            'cedula': cliente.cedula
+        },
+        'puede_eliminar': len(activos_con_saldo) == 0,
+        'bloqueos': [{'id': a.id, 'saldo': round(a.saldo_restante, 2)} for a in activos_con_saldo],
+        'se_conserva': {
+            'apartados_finalizados': Apartado.query.filter_by(cliente_id=id, estado='pagado').count(),
+            'apartados_reintegrados': Apartado.query.filter_by(cliente_id=id, estado='reintegrado').count(),
+            'ventas': Venta.query.filter_by(cliente_id=id).count()
+        }
+    }), 200
+
+
+@api_bp.route('/mantenimiento/purgar-logs', methods=['POST'])
+@login_required
+def purgar_logs_manual():
+    """🔥 NUEVO: limpieza manual de logs desde la interfaz."""
+    try:
+        dias = int((request.get_json(silent=True) or {}).get('dias', DIAS_RETENCION_LOGS))
+    except (TypeError, ValueError):
+        dias = DIAS_RETENCION_LOGS
+    dias = max(7, min(dias, 3650))
+    borrados = purgar_logs_antiguos(dias=dias, forzado=True)
+    return jsonify({
+        'mensaje': f'{borrados} registro(s) de log eliminados (anteriores a {dias} días).',
+        'eliminados': borrados,
+        'dias_retencion': dias
+    }), 200
+
 
 # ============================================================
 # 🔥 NUEVO ENDPOINT: DESACTIVAR CLIENTE (PUT explícito)
@@ -4139,6 +4436,11 @@ def crear_apartado():
     # Crear el apartado - guardamos total_usd como el transaccional
     apartado = Apartado(
         cliente_id=cliente_id,
+        # 🔥 NUEVO: respaldo de los datos del cliente al momento del apartado.
+        # Si el cliente se elimina luego, el histórico sigue siendo legible.
+        cliente_nombre_hist=f"{cliente.nombre} {cliente.apellido}".strip(),
+        cliente_cedula_hist=cliente.cedula,
+        cliente_telefono_hist=cliente.telefono,
         producto_id=producto_id,
         cantidad=cantidad,
         precio_unitario_usd=precio_unitario_usd,  # Precio fijo en USD
@@ -4238,8 +4540,10 @@ def listar_apartados():
         
         result.append({
             'id': a.id,
-            'cliente': f"{cliente.nombre} {cliente.apellido}",
-            'cliente_cedula': cliente.cedula,
+            # 🔥 Si el cliente fue eliminado, cae al respaldo histórico
+            'cliente': a.cliente_nombre_completo,
+            'cliente_cedula': a.cliente_cedula_segura,
+            'cliente_eliminado': a.cliente_eliminado,
             'producto': producto.nombre,
             'cantidad': a.cantidad,
             'precio_unitario_usd': a.precio_unitario_usd,
@@ -4272,12 +4576,15 @@ def detalle_apartado(id):
     return jsonify({
         'id': apartado.id,
         'cliente': {
-            'id': cliente.id,
-            'nombre': cliente.nombre,
-            'apellido': cliente.apellido,
-            'cedula': cliente.cedula,
-            'telefono': cliente.telefono,
-            'direccion': cliente.direccion
+            # 🔥 Tolerante a cliente eliminado: cae al respaldo histórico
+            'id': cliente.id if cliente else None,
+            'nombre': cliente.nombre if cliente else (apartado.cliente_nombre_hist or 'Cliente eliminado'),
+            'apellido': cliente.apellido if cliente else '',
+            'cedula': apartado.cliente_cedula_segura,
+            'telefono': apartado.cliente_telefono_seguro,
+            'direccion': cliente.direccion if cliente else '—',
+            'eliminado': apartado.cliente_eliminado,
+            'nombre_completo': apartado.cliente_nombre_completo
         },
         'producto': {
             'id': producto.id,
@@ -4644,19 +4951,47 @@ def reintegrar_apartado(id):
         producto.stock += apartado.cantidad
         db.session.add(producto)
     
+    # ============================================================
+    # 🔥 NUEVO: ANULAR LOS ABONOS DEL APARTADO
+    # El reintegro deshace la operación completa: el producto vuelve al
+    # inventario y el dinero abonado deja de contar como ingreso. Se marca
+    # como anulado (no se borra) para conservar el rastro ante un reclamo,
+    # pero NO suma en ningún reporte.
+    # ============================================================
+    momento = now_venezuela()
+    total_anulado_usd = 0.0
+    total_anulado_ves = 0.0
+    pagos_anulados = 0
+
+    for pago in apartado.pagos:
+        if not pago.anulado:
+            pago.anulado = True
+            pago.fecha_anulacion = momento
+            pago.motivo_anulacion = f'Apartado #{apartado.id} reintegrado'
+            total_anulado_usd += (pago.monto_usd or 0.0)
+            total_anulado_ves += (pago.monto_ves or 0.0)
+            pagos_anulados += 1
+            db.session.add(pago)
+
     # Cambiar estado
     apartado.estado = 'reintegrado'
-    apartado.fecha_finalizacion = now_venezuela()
+    apartado.fecha_finalizacion = momento
     
     # Log
     log = Log(accion='APARTADO_REINTEGRADO',
-              detalle=f'Apartado #{apartado.id} reintegrado - Producto: {apartado.producto.nombre}')
+              detalle=f'Apartado #{apartado.id} reintegrado - Producto: {apartado.producto.nombre} - '
+                      f'{pagos_anulados} abono(s) anulados por ${total_anulado_usd:.2f} '
+                      f'(Bs {total_anulado_ves:,.2f}) - Stock devuelto: {apartado.cantidad}')
     db.session.add(log)
     
     db.session.commit()
     
     return jsonify({
-        'mensaje': 'Apartado reintegrado exitosamente'
+        'mensaje': 'Apartado reintegrado exitosamente',
+        'stock_devuelto': apartado.cantidad if apartado.descontar_stock_al_apartar else 0,
+        'pagos_anulados': pagos_anulados,
+        'monto_anulado_usd': round(total_anulado_usd, 2),
+        'monto_anulado_ves': round(total_anulado_ves, 2)
     }), 200
 
 # ============================================================
@@ -4667,8 +5002,11 @@ def reintegrar_apartado(id):
 @login_required
 def reportes_abonos():
     """Datos para la pestaña de Abonos de Apartados.
-       Devuelve TODOS los pagos (abonos) sin filtrar por estado del apartado,
-       ya que el abono es un ingreso real y debe contabilizarse siempre.
+
+       🔥 CORREGIDO: se excluyen los abonos ANULADOS (los de apartados que
+       fueron reintegrados). Al reintegrar, el producto vuelve al inventario
+       y el dinero deja de ser un ingreso; contabilizarlo inflaba los totales
+       con montos que no correspondían a ninguna venta real.
     """
     fecha_desde = request.args.get('fecha_desde')
     fecha_hasta = request.args.get('fecha_hasta')
@@ -4682,9 +5020,13 @@ def reportes_abonos():
         hasta = datetime.strptime(fecha_hasta, '%Y-%m-%d') + timedelta(days=1)
     
     # ============================================================
-    # 🔥 CORRECCIÓN: Obtener TODOS los pagos (sin filtrar por estado)
+    # 🔥 CORRECCIÓN: excluir los abonos anulados (apartados reintegrados).
+    # Se acepta también anulado IS NULL para tolerar filas antiguas creadas
+    # antes de la migración, que deben tratarse como válidas.
     # ============================================================
-    query_pagos = PagoApartado.query
+    query_pagos = PagoApartado.query.filter(
+        or_(PagoApartado.anulado == False, PagoApartado.anulado.is_(None))
+    )
     if desde:
         query_pagos = query_pagos.filter(PagoApartado.fecha_abono >= desde)
     if hasta:
@@ -4724,6 +5066,7 @@ def reportes_abonos():
         func.sum(PagoApartado.monto_usd).label('total'),
         func.count(Apartado.id.distinct()).label('vendido')  # número de apartados distintos por producto
     ).join(Apartado, Apartado.id == PagoApartado.apartado_id)\
+     .filter(or_(PagoApartado.anulado == False, PagoApartado.anulado.is_(None)))\
      .join(Producto, Producto.id == Apartado.producto_id)\
      .filter(PagoApartado.fecha_abono >= (desde if fecha_desde else datetime(2000,1,1)))\
      .filter(PagoApartado.fecha_abono < (hasta if fecha_hasta else datetime(2100,1,1)))\
@@ -4746,6 +5089,7 @@ def reportes_abonos():
         func.sum(PagoApartado.monto_ves).label('total'),
         func.count(Apartado.id.distinct()).label('vendido')
     ).join(Apartado, Apartado.id == PagoApartado.apartado_id)\
+     .filter(or_(PagoApartado.anulado == False, PagoApartado.anulado.is_(None)))\
      .join(Producto, Producto.id == Apartado.producto_id)\
      .filter(PagoApartado.fecha_abono >= (desde if fecha_desde else datetime(2000,1,1)))\
      .filter(PagoApartado.fecha_abono < (hasta if fecha_hasta else datetime(2100,1,1)))\
@@ -4867,7 +5211,11 @@ def reportes_abonos():
     inicio_mes = datetime(hoy.year, hoy.month, 1, 0, 0, 0)
     
     def total_abonos_periodo(inicio, fin):
-        pagos_periodo = PagoApartado.query.filter(PagoApartado.fecha_abono >= inicio, PagoApartado.fecha_abono < fin).all()
+        pagos_periodo = PagoApartado.query.filter(
+            PagoApartado.fecha_abono >= inicio,
+            PagoApartado.fecha_abono < fin,
+            or_(PagoApartado.anulado == False, PagoApartado.anulado.is_(None))
+        ).all()
         usd = 0
         ves = 0
         for p in pagos_periodo:
@@ -4950,7 +5298,10 @@ def reportes_globales():
     # ============================================================
     # 🔧 2. PAGOS DE APARTADOS (todos los pagos, sin filtrar por estado)
     # ============================================================
-    pagos_apartados_query = PagoApartado.query
+    # 🔥 Excluir abonos anulados (apartados reintegrados) también en el Global
+    pagos_apartados_query = PagoApartado.query.filter(
+        or_(PagoApartado.anulado == False, PagoApartado.anulado.is_(None))
+    )
     if desde:
         pagos_apartados_query = pagos_apartados_query.filter(PagoApartado.fecha_abono >= desde)
     if hasta:
@@ -5110,6 +5461,7 @@ def reportes_globales():
         func.count(Apartado.id.distinct()).label('cantidad'),
         func.sum(PagoApartado.monto_usd).label('total')
     ).join(Apartado, Apartado.id == PagoApartado.apartado_id)\
+     .filter(or_(PagoApartado.anulado == False, PagoApartado.anulado.is_(None)))\
      .join(Producto, Producto.id == Apartado.producto_id)\
      .filter(PagoApartado.fecha_abono >= (desde if fecha_desde else datetime(2000,1,1)))\
      .filter(PagoApartado.fecha_abono < (hasta if fecha_hasta else datetime(2100,1,1)))\
@@ -5144,6 +5496,7 @@ def reportes_globales():
         func.count(Apartado.id.distinct()).label('cantidad'),
         func.sum(PagoApartado.monto_ves).label('total')
     ).join(Apartado, Apartado.id == PagoApartado.apartado_id)\
+     .filter(or_(PagoApartado.anulado == False, PagoApartado.anulado.is_(None)))\
      .join(Producto, Producto.id == Apartado.producto_id)\
      .filter(PagoApartado.fecha_abono >= (desde if fecha_desde else datetime(2000,1,1)))\
      .filter(PagoApartado.fecha_abono < (hasta if fecha_hasta else datetime(2100,1,1)))\

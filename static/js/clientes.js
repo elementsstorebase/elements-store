@@ -96,8 +96,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Botón Reactivar
                 acciones = `
                     <button onclick="abrirModalAccion(${c.id}, '${c.nombre} ${c.apellido}', 'reactivar')" 
-                            class="text-green-500 hover:text-green-700" title="Reactivar">
+                            class="text-green-500 hover:text-green-700 mr-3" title="Reactivar">
                         <i class="fas fa-user-check"></i> Reactivar
+                    </button>
+                    <button onclick="abrirModalEliminar(${c.id}, '${(c.nombre + ' ' + c.apellido).replace(/'/g, "\\'")}')" 
+                            class="text-red-600 hover:text-red-800" title="Eliminar definitivamente">
+                        <i class="fas fa-trash-alt"></i> Eliminar
                     </button>
                 `;
             }
@@ -202,6 +206,132 @@ document.addEventListener('DOMContentLoaded', function() {
             alert('❌ Error: ' + err.message);
             // El modal queda abierto para que el usuario vea el error y pueda cancelar o reintentar
         });
+    };
+
+
+    // ============================================================
+    // 🔥 NUEVO: ELIMINACIÓN DEFINITIVA DE CLIENTE
+    // Antes de borrar consulta al servidor qué va a pasar y se lo
+    // muestra a la usuaria de forma clara.
+    // ============================================================
+    let clienteIdEliminar = null;
+
+    window.abrirModalEliminar = function(id, nombre) {
+        clienteIdEliminar = id;
+        const modal = document.getElementById('modal-eliminar-cliente');
+        const cuerpo = document.getElementById('modal-eliminar-cuerpo');
+        const btnOk  = document.getElementById('modal-eliminar-confirmar');
+        if (!modal) { alert('No se encontró el diálogo de eliminación.'); return; }
+
+        document.getElementById('modal-eliminar-nombre').textContent = nombre;
+        cuerpo.innerHTML = '<p class="text-gray-500 text-sm py-4 text-center">' +
+                           '<i class="fas fa-spinner fa-spin mr-2"></i>Revisando la información del cliente...</p>';
+        btnOk.disabled = true;
+        btnOk.classList.add('opacity-50', 'cursor-not-allowed');
+        modal.classList.remove('hidden');
+
+        fetch(`/api/clientes/${id}/previsualizar-eliminacion`)
+            .then(r => r.json())
+            .then(info => {
+                const c = info.se_conserva || {};
+                const totalHist = (c.apartados_finalizados || 0) + (c.apartados_reintegrados || 0) + (c.ventas || 0);
+
+                if (!info.puede_eliminar) {
+                    const lista = (info.bloqueos || [])
+                        .map(b => `<li class="ml-4">Apartado #${b.id} — faltan $${b.saldo.toFixed(2)} por pagar</li>`)
+                        .join('');
+                    cuerpo.innerHTML = `
+                        <div class="bg-yellow-50 border border-yellow-300 rounded-lg p-3 text-sm">
+                            <p class="font-semibold text-yellow-800 mb-1">
+                                <i class="fas fa-exclamation-triangle mr-1"></i>No se puede eliminar todavía
+                            </p>
+                            <p class="text-yellow-900 mb-2">Este cliente tiene un apartado en curso:</p>
+                            <ul class="list-disc text-yellow-900 mb-2">${lista}</ul>
+                            <p class="text-yellow-900">
+                                Ve a <strong>Deudas Activas</strong> y finaliza el apartado (si terminó de pagar)
+                                o usa <strong>Reintegrar</strong> (si ya no lo quiere). Después podrás eliminarlo.
+                            </p>
+                        </div>`;
+                    return;
+                }
+
+                cuerpo.innerHTML = `
+                    <div class="space-y-3 text-sm">
+                        <div class="bg-red-50 border border-red-200 rounded-lg p-3">
+                            <p class="font-semibold text-red-800 mb-1">
+                                <i class="fas fa-trash-alt mr-1"></i>Lo que se BORRA para siempre
+                            </p>
+                            <p class="text-red-900">
+                                La ficha del cliente: nombre, cédula, teléfono y dirección.
+                                Desaparece de la lista y no se puede recuperar.
+                            </p>
+                        </div>
+
+                        <div class="bg-green-50 border border-green-200 rounded-lg p-3">
+                            <p class="font-semibold text-green-800 mb-1">
+                                <i class="fas fa-shield-alt mr-1"></i>Lo que SE CONSERVA
+                            </p>
+                            <ul class="text-green-900 list-disc ml-4 space-y-1">
+                                <li><strong>${c.apartados_finalizados || 0}</strong> apartado(s) finalizado(s) en Deudas Finalizadas</li>
+                                <li><strong>${c.apartados_reintegrados || 0}</strong> apartado(s) reintegrado(s)</li>
+                                <li><strong>${c.ventas || 0}</strong> venta(s) y sus tickets</li>
+                            </ul>
+                            <p class="text-green-900 mt-2">
+                                ${totalHist > 0
+                                    ? 'Estos registros seguirán mostrando el nombre del cliente, aunque su ficha ya no exista.'
+                                    : 'Este cliente no tiene historial, así que no queda nada guardado.'}
+                            </p>
+                        </div>
+
+                        <p class="text-gray-600">
+                            <i class="fas fa-info-circle mr-1"></i>
+                            El historial solo se borra desde el propio módulo de Deudas Finalizadas.
+                        </p>
+                    </div>`;
+
+                btnOk.disabled = false;
+                btnOk.classList.remove('opacity-50', 'cursor-not-allowed');
+            })
+            .catch(() => {
+                cuerpo.innerHTML = '<p class="text-red-600 text-sm">No se pudo consultar la información del cliente. Intenta de nuevo.</p>';
+            });
+    };
+
+    window.cerrarModalEliminar = function() {
+        const modal = document.getElementById('modal-eliminar-cliente');
+        if (modal) modal.classList.add('hidden');
+        clienteIdEliminar = null;
+    };
+
+    window.confirmarEliminar = function() {
+        if (!clienteIdEliminar) return;
+        const btnOk = document.getElementById('modal-eliminar-confirmar');
+        btnOk.disabled = true;
+        btnOk.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Eliminando...';
+
+        fetch(`/api/clientes/${clienteIdEliminar}`, { method: 'DELETE' })
+            .then(r => r.json().then(d => ({ ok: r.ok, d })))
+            .then(({ ok, d }) => {
+                if (!ok) throw new Error(d.error || 'No se pudo eliminar');
+                alert('✅ ' + (d.mensaje || 'Cliente eliminado correctamente'));
+                cerrarModalEliminar();
+                cargarClientes();
+            })
+            .catch(err => alert('❌ ' + err.message))
+            .finally(() => {
+                btnOk.disabled = false;
+                btnOk.innerHTML = '<i class="fas fa-trash-alt mr-1"></i> Sí, eliminar';
+            });
+    };
+
+    // ---------- Manual de ayuda ----------
+    window.abrirAyudaClientes = function() {
+        const m = document.getElementById('modal-ayuda-clientes');
+        if (m) m.classList.remove('hidden');
+    };
+    window.cerrarAyudaClientes = function() {
+        const m = document.getElementById('modal-ayuda-clientes');
+        if (m) m.classList.add('hidden');
     };
 
     // ---------- MANEJO DEL FORMULARIO DE CREACIÓN ----------

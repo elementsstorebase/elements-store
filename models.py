@@ -149,7 +149,14 @@ class Abono(db.Model):
 class Apartado(db.Model):
     __tablename__ = 'apartados'
     id = db.Column(db.Integer, primary_key=True)
-    cliente_id = db.Column(db.Integer, db.ForeignKey('clientes.id', ondelete='CASCADE'), nullable=False)
+    # 🔥 MODIFICADO: SET NULL + nullable para poder eliminar el cliente
+    # conservando el histórico del apartado (Deudas Finalizadas).
+    cliente_id = db.Column(db.Integer, db.ForeignKey('clientes.id', ondelete='SET NULL'), nullable=True)
+    # 🔥 NUEVO: respaldo ("foto") de los datos del cliente al crear el apartado.
+    # Permite que el histórico siga siendo legible si el cliente se elimina.
+    cliente_nombre_hist = db.Column(db.String(120), nullable=True)
+    cliente_cedula_hist = db.Column(db.String(20), nullable=True)
+    cliente_telefono_hist = db.Column(db.String(20), nullable=True)
     producto_id = db.Column(db.Integer, db.ForeignKey('productos.id', ondelete='CASCADE'), nullable=False)
     cantidad = db.Column(db.Integer, nullable=False)
     precio_unitario_usd = db.Column(db.Float, nullable=False)
@@ -169,6 +176,39 @@ class Apartado(db.Model):
     fecha_finalizacion = db.Column(db.DateTime, nullable=True)
     ticket_generado = db.Column(db.Boolean, default=False)
     pagos = db.relationship('PagoApartado', backref='apartado', lazy=True, cascade='all, delete-orphan')
+
+    # ========================================================
+    # 🔥 NUEVO: lectura segura de los datos del cliente.
+    # Si el cliente existe -> datos actuales. Si fue eliminado -> respaldo.
+    # ========================================================
+    @property
+    def cliente_nombre_completo(self):
+        if self.cliente:
+            return f"{self.cliente.nombre} {self.cliente.apellido}".strip()
+        return self.cliente_nombre_hist or 'Cliente eliminado'
+
+    @property
+    def cliente_cedula_segura(self):
+        if self.cliente:
+            return self.cliente.cedula
+        return self.cliente_cedula_hist or '—'
+
+    @property
+    def cliente_telefono_seguro(self):
+        if self.cliente:
+            return self.cliente.telefono
+        return self.cliente_telefono_hist or '—'
+
+    @property
+    def cliente_eliminado(self):
+        """True si el cliente original ya no existe en el sistema."""
+        return self.cliente is None
+
+    @property
+    def total_abonado_valido(self):
+        """Suma de abonos NO anulados (los reintegrados no cuentan)."""
+        return round(sum(p.monto_usd for p in self.pagos if not p.anulado), 2)
+
     __table_args__ = (
         db.Index('idx_apartado_estado', 'estado'),
         db.Index('idx_apartado_cliente_estado', 'cliente_id', 'estado'),
@@ -186,9 +226,16 @@ class PagoApartado(db.Model):
     metodo_pago = db.Column(db.String(50), nullable=False)
     fecha_abono = db.Column(db.DateTime, default=now_venezuela)  # 🔥 MODIFICADO
     observaciones = db.Column(db.String(255), nullable=True)
+    # 🔥 NUEVO: anulación lógica del abono (misma idea que 'anulado' en ventas).
+    # Al reintegrar un apartado sus pagos se marcan anulado=True: dejan de
+    # sumar en Finanzas pero se conserva el rastro para auditoría.
+    anulado = db.Column(db.Boolean, default=False, nullable=False)
+    fecha_anulacion = db.Column(db.DateTime, nullable=True)
+    motivo_anulacion = db.Column(db.String(255), nullable=True)
     __table_args__ = (
         db.Index('idx_pago_apartado', 'apartado_id'),
         db.Index('idx_pago_fecha', 'fecha_abono'),
+        db.Index('idx_pago_anulado', 'anulado'),
     )
 
 class Log(db.Model):
