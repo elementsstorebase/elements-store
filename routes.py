@@ -1,7 +1,3 @@
-# ============================================================
-# routes.py - Elements Store (con corrección en bs_personalizado y personalizada)
-# ============================================================
-
 from flask import Blueprint, render_template, request, jsonify, current_app, send_file, session, redirect, url_for, flash
 from models import db, Producto, Marca, Categoria, Subcategoria, Talla, Cliente, Venta, DetalleVenta, Credito, Abono, Log, Configuracion, Gasto, CategoriaGasto, ReporteVenta, HistorialTasa, Usuario, Apartado, PagoApartado, CuentaFinanciera, Deuda, ConfiguracionImpresora, now_venezuela
 from utils import obtener_tasas_bcv, obtener_tasa_personalizada, calcular_precios_alternativos
@@ -2299,8 +2295,7 @@ def registrar_venta():
     elif metodo_cobro == 'personalizada':
         tasa_aplicada = tasa_personalizada
         moneda_cobro = 'VES'
-        total_cobro = round(subtotal_usd * tasa_personalizada, 2)   # ✅ Lo que el cliente paga (en VES)
-        subtotal_ves = round(subtotal_usd * tasa_usd, 2)            # ✅ LO QUE DEBE MOSTRAR EL TICKET (a BCV)
+        subtotal_ves = round(subtotal_usd * tasa_usd, 2)            # ✅ Equivalente BCV para el ticket
         factor_ajuste = 1.0
     elif metodo_cobro == 'bs_personalizado':
         # 🔥 CORRECCIÓN: total_cobro es el monto en Bs ingresado por el usuario (ej: 68000)
@@ -2336,7 +2331,7 @@ def registrar_venta():
     else:
         total_ves_final = subtotal_ves
 
-    # Si el método de cobro es en VES, el total_cobro debe ser total_ves_final
+    # ✅ CORREGIDO: Calcular total_cobro ANTES de crear la venta
     if moneda_cobro == 'VES':
         total_cobro = total_ves_final
 
