@@ -1,5 +1,5 @@
 # ============================================================
-# routes.py - Elements Store (con corrección en bs_personalizado)
+# routes.py - Elements Store (con corrección en bs_personalizado y personalizada)
 # ============================================================
 
 from flask import Blueprint, render_template, request, jsonify, current_app, send_file, session, redirect, url_for, flash
@@ -2147,6 +2147,7 @@ def reactivar_cliente(id):
 # 🔥 MODIFICADO: uso de obtener_proximo_numero_ticket() (secuencia estricta)
 # 🔥 MODIFICADO: lógica mejorada para asignar cliente basado en datos del formulario
 # 🔥 CORRECCIÓN EN bs_personalizado: subtotal_ves = subtotal_usd * tasa_usd
+# 🔥 CORRECCIÓN EN personalizada: subtotal_ves = subtotal_usd * tasa_usd (BCV)
 # ============================================================
 
 @api_bp.route('/ventas', methods=['POST'])
@@ -2298,8 +2299,8 @@ def registrar_venta():
     elif metodo_cobro == 'personalizada':
         tasa_aplicada = tasa_personalizada
         moneda_cobro = 'VES'
-        total_cobro = subtotal_usd * tasa_personalizada
-        subtotal_ves = total_cobro
+        total_cobro = round(subtotal_usd * tasa_personalizada, 2)   # ✅ Lo que el cliente paga (en VES)
+        subtotal_ves = round(subtotal_usd * tasa_usd, 2)            # ✅ LO QUE DEBE MOSTRAR EL TICKET (a BCV)
         factor_ajuste = 1.0
     elif metodo_cobro == 'bs_personalizado':
         # 🔥 CORRECCIÓN: total_cobro es el monto en Bs ingresado por el usuario (ej: 68000)
