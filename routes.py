@@ -3629,7 +3629,21 @@ def generar_ticket_imagen(venta_id):
         'usd_personalizado': 'Dólar Personalizado'
     }
     metodo_cobro_legible = metodo_cobro_map.get(venta.metodo_cobro, venta.metodo_cobro)
-    
+
+    # ============================================================
+    # 🔥 ENMASCARAMIENTO DE TASA (igual que la nota de entrega HTML y el físico)
+    # El ticket SIEMPRE se expresa contra la tasa BCV USD del día, aunque el
+    # cobro se haya calculado con euro o con una tasa personalizada. Así la
+    # imagen que se envía por WhatsApp dice lo mismo que el papel impreso.
+    # El monto NO cambia: solo cambia la etiqueta y el número de tasa mostrado.
+    # ============================================================
+    if venta.metodo_cobro in ['personalizada', 'bs_personalizado',
+                              'usd_personalizado', 'bcv_eur']:
+        metodo_cobro_legible = 'Tasa BCV USD'
+        tasa_mostrar = venta.tasa_bcv_usd or 0.0
+    else:
+        tasa_mostrar = venta.tasa_aplicada or 0.0
+
     # 🔥 CORRECCIÓN: Obtener fecha local (forzando UTC)
     if venta.fecha.tzinfo is None:
         fecha_utc = pytz.UTC.localize(venta.fecha)
@@ -3804,10 +3818,11 @@ def generar_ticket_imagen(venta_id):
     
     y += 20 * scale
     
-    if venta.metodo_cobro not in ['personalizada', 'bs_personalizado']:
-        draw.text((padding, y), f"Método Cobro: {metodo_cobro_legible}", fill='black', font=font_small)
-        y += 14 * scale
-        draw.text((padding, y), f"Tasa aplicada: {venta.tasa_aplicada:.2f}", fill='black', font=font_small)
+    # Mismo criterio que el ticket físico: una sola línea "Tasa BCV" con la
+    # tasa oficial del día, sin delatar el método de cobro usado.
+    if tasa_mostrar and tasa_mostrar > 0:
+        draw.text((padding, y), f"Tasa BCV: Bs {tasa_mostrar:,.2f}".replace(',', '.'),
+                  fill='black', font=font_small)
         y += 14 * scale
     
     draw.text((padding, y), f"Método Pago: {venta.metodo_pago}", fill='black', font=font_small)
