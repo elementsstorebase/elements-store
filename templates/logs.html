@@ -2,7 +2,50 @@
 
 {% block content %}
 <div class="card">
-    <h2 class="text-2xl font-semibold text-gray-800 mb-4">Log de Transacciones</h2>
+    <!-- Encabezado con acciones -->
+    <div class="flex flex-wrap justify-between items-start gap-4 mb-4">
+        <div>
+            <h2 class="text-2xl font-semibold text-gray-800">Historial de Actividad</h2>
+            <p class="text-sm text-gray-400">Registro de todo lo que ocurre en el sistema</p>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <!-- 🔥 NUEVO: ayuda -->
+            <button type="button" onclick="abrirAyudaLogs()"
+                    class="flex items-center gap-2 px-3 py-2 rounded-lg border border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition-colors text-sm font-medium"
+                    title="¿Qué es esto?">
+                <i class="fas fa-question-circle"></i> Ayuda
+            </button>
+
+            <!-- 🔥 NUEVO: limpieza manual -->
+            <button type="button" onclick="abrirModalLimpiar()"
+                    class="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors text-sm font-medium"
+                    title="Eliminar registros del historial">
+                <i class="fas fa-trash-alt"></i> Limpiar historial
+            </button>
+        </div>
+    </div>
+
+    <!-- 🔥 NUEVO: resumen del historial -->
+    <div id="logs-resumen" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+        <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+            <p class="text-xs text-gray-500 uppercase tracking-wide">Registros</p>
+            <p id="resumen-total" class="text-xl font-semibold text-gray-800">—</p>
+        </div>
+        <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+            <p class="text-xs text-gray-500 uppercase tracking-wide">Espacio aprox.</p>
+            <p id="resumen-peso" class="text-xl font-semibold text-gray-800">—</p>
+        </div>
+        <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+            <p class="text-xs text-gray-500 uppercase tracking-wide">Más antiguo</p>
+            <p id="resumen-antiguo" class="text-sm font-medium text-gray-700 mt-1">—</p>
+        </div>
+        <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+            <p class="text-xs text-gray-500 uppercase tracking-wide">Limpieza automática</p>
+            <p id="resumen-retencion" class="text-sm font-medium text-gray-700 mt-1">—</p>
+        </div>
+    </div>
+
     <div class="overflow-x-auto">
         <table class="w-full text-sm">
             <thead>
@@ -17,6 +60,165 @@
                 <tr><td colspan="4" class="text-center py-4 text-gray-400">Cargando...</td></tr>
             </tbody>
         </table>
+    </div>
+</div>
+
+
+<!-- ============================================================ -->
+<!-- 🔥 NUEVO: MODAL DE LIMPIEZA DEL HISTORIAL -->
+<!-- ============================================================ -->
+<div id="modal-limpiar-logs" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50 p-4">
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div class="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+            <h3 class="text-lg font-semibold text-gray-800">
+                <i class="fas fa-broom text-red-600 mr-2"></i>Limpiar historial de actividad
+            </h3>
+            <button onclick="cerrarModalLimpiar()" class="text-gray-400 hover:text-gray-600" aria-label="Cerrar">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <div class="px-5 py-4 space-y-4">
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-900">
+                <i class="fas fa-info-circle mr-1"></i>
+                Esto solo borra el <strong>registro de actividad</strong>.
+                No afecta tus ventas, apartados, clientes, inventario ni finanzas.
+            </div>
+
+            <div>
+                <p class="text-sm font-medium text-gray-700 mb-2">¿Qué quieres eliminar?</p>
+                <div class="space-y-2" id="opciones-limpieza">
+                    <!-- se llena desde logs.js con los conteos reales -->
+                    <p class="text-gray-400 text-sm">
+                        <i class="fas fa-spinner fa-spin mr-1"></i>Calculando...
+                    </p>
+                </div>
+            </div>
+
+            <!-- Confirmación extra para el borrado total -->
+            <div id="bloque-confirmacion-total" class="hidden">
+                <div class="bg-red-50 border border-red-300 rounded-lg p-3">
+                    <p class="text-sm text-red-900 font-medium mb-2">
+                        <i class="fas fa-triangle-exclamation mr-1"></i>
+                        Vas a borrar <strong>todo</strong> el historial. Esta acción no se puede deshacer.
+                    </p>
+                    <label class="block text-xs text-red-800 mb-1">
+                        Escribe <strong>ELIMINAR</strong> para confirmar:
+                    </label>
+                    <input type="text" id="input-confirmacion"
+                           class="w-full px-3 py-2 border border-red-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
+                           placeholder="ELIMINAR" autocomplete="off">
+                    <p class="text-xs text-red-700 mt-2">
+                        <i class="fas fa-lock mr-1"></i>Solo un usuario <strong>Master</strong> puede hacer esto.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="px-5 py-4 border-t border-gray-200 flex gap-3">
+            <button onclick="cerrarModalLimpiar()"
+                    class="flex-1 px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium">
+                Cancelar
+            </button>
+            <button id="btn-confirmar-limpieza" onclick="confirmarLimpieza()"
+                    class="flex-1 px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 font-medium opacity-50 cursor-not-allowed"
+                    disabled>
+                <i class="fas fa-trash-alt mr-1"></i> Eliminar
+            </button>
+        </div>
+    </div>
+</div>
+
+
+<!-- ============================================================ -->
+<!-- 🔥 NUEVO: AYUDA DEL MÓDULO -->
+<!-- ============================================================ -->
+<div id="modal-ayuda-logs" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50 p-4">
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div class="px-5 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white rounded-t-xl">
+            <h3 class="text-lg font-semibold text-gray-800">
+                <i class="fas fa-book-open text-indigo-600 mr-2"></i>Guía: Historial de Actividad
+            </h3>
+            <button onclick="cerrarAyudaLogs()" class="text-gray-400 hover:text-gray-600" aria-label="Cerrar">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <div class="px-5 py-4 space-y-5 text-sm text-gray-700">
+            <section>
+                <h4 class="font-semibold text-gray-900 mb-2">
+                    <i class="fas fa-clipboard-list text-indigo-500 mr-1"></i>¿Qué es esta pantalla?
+                </h4>
+                <p>
+                    Es el cuaderno de bitácora del sistema. Cada vez que se hace una venta,
+                    se crea un apartado, se registra un abono o se modifica un producto,
+                    queda anotado aquí con la fecha y el usuario que lo hizo.
+                </p>
+            </section>
+
+            <section>
+                <h4 class="font-semibold text-gray-900 mb-2">
+                    <i class="fas fa-magnifying-glass text-indigo-500 mr-1"></i>¿Para qué sirve?
+                </h4>
+                <p>
+                    Para reconstruir qué pasó cuando algo no cuadra. Si un monto aparece raro
+                    o un producto desaparece del inventario, aquí se puede ver qué se hizo,
+                    cuándo y quién lo hizo.
+                </p>
+            </section>
+
+            <section class="border-l-4 border-green-400 bg-green-50 rounded-r-lg p-3">
+                <h4 class="font-semibold text-gray-900 mb-2">
+                    <i class="fas fa-shield-alt text-green-600 mr-1"></i>Borrarlo es seguro
+                </h4>
+                <p>
+                    El historial es <strong>solo un registro informativo</strong>.
+                    Borrarlo no elimina ninguna venta, apartado, cliente, producto ni monto.
+                    Todo eso vive en sus propios módulos y no se toca.
+                </p>
+                <p class="mt-2">
+                    Lo único que pierdes es la capacidad de mirar hacia atrás
+                    para investigar algo que haya pasado antes del borrado.
+                </p>
+            </section>
+
+            <section>
+                <h4 class="font-semibold text-gray-900 mb-2">
+                    <i class="fas fa-robot text-indigo-500 mr-1"></i>Limpieza automática
+                </h4>
+                <p>
+                    El sistema ya se limpia solo: una vez al día borra los registros
+                    con más de <strong>90 días</strong>. Así el historial no crece sin control
+                    y no tienes que acordarte de nada.
+                </p>
+                <p class="mt-2 text-gray-600">
+                    El botón <em>Limpiar historial</em> es por si quieres hacerlo antes,
+                    manualmente, sin esperar a que se cumpla el plazo.
+                </p>
+            </section>
+
+            <section class="border-l-4 border-amber-400 bg-amber-50 rounded-r-lg p-3">
+                <h4 class="font-semibold text-gray-900 mb-2">
+                    <i class="fas fa-lightbulb text-amber-600 mr-1"></i>Recomendación
+                </h4>
+                <p>
+                    Si solo quieres liberar espacio, usa una de las opciones por antigüedad
+                    (por ejemplo, "más de 30 días"): borras lo viejo y conservas lo reciente,
+                    que es lo que sirve para investigar un problema actual.
+                </p>
+                <p class="mt-2">
+                    El <strong>borrado total</strong> déjalo para cuando quieras empezar
+                    de cero, por ejemplo al cerrar un periodo.
+                </p>
+            </section>
+        </div>
+
+        <div class="px-5 py-4 border-t border-gray-200 sticky bottom-0 bg-white rounded-b-xl">
+            <button onclick="cerrarAyudaLogs()"
+                    class="w-full px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 font-medium">
+                Entendido
+            </button>
+        </div>
     </div>
 </div>
 
