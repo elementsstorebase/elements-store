@@ -908,7 +908,9 @@ def ticket_nota_entrega(venta_id):
     # 🔥 ENMASCARAMIENTO DE TASA PERSONALIZADA
     # ============================================================
     metodo_cobro = venta.metodo_cobro
-    if metodo_cobro in ['personalizada', 'bs_personalizado', 'usd_personalizado']:
+    if metodo_cobro in ['personalizada', 'bs_personalizado', 'usd_personalizado', 'bcv_eur']:
+        # El ticket expresa el equivalente a la tasa BCV USD: la tasa mostrada
+        # debe ser la misma con la que se calculó subtotal_ves.
         metodo_mostrar = 'Tasa BCV USD'
         tasa_mostrar = venta.tasa_bcv_usd  # Tasa oficial del día
     else:
@@ -2244,6 +2246,31 @@ def registrar_venta():
     tasa_usd = tasas['usd']
     tasa_eur = tasas['eur']
 
+    # Precio unitario impuesto por el usuario (Bs Personalizado / Dólar Personalizado)
+    precio_base_bs = data.get('precio_base_bs')
+    precio_base_usd_manual = data.get('precio_base_usd')
+
+    precio_override_usd = None
+    if metodo_cobro == 'bs_personalizado':
+        if precio_base_bs is None:
+            return jsonify({'error': 'Falta precio_base_bs para el método Bs Personalizado'}), 400
+        try:
+            precio_base_bs = float(precio_base_bs)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'precio_base_bs inválido'}), 400
+        if precio_base_bs <= 0 or tasa_usd <= 0:
+            return jsonify({'error': 'precio_base_bs o tasa BCV inválidos'}), 400
+        precio_override_usd = precio_base_bs / tasa_usd
+    elif metodo_cobro == 'usd_personalizado':
+        if precio_base_usd_manual is None:
+            return jsonify({'error': 'Falta precio_base_usd para el método Dólar Personalizado'}), 400
+        try:
+            precio_override_usd = float(precio_base_usd_manual)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'precio_base_usd inválido'}), 400
+        if precio_override_usd <= 0:
+            return jsonify({'error': 'precio_base_usd inválido'}), 400
+
     # Calcular subtotal original en USD sin ajustes
     subtotal_usd = 0.0
     items_data = []
@@ -2260,6 +2287,8 @@ def registrar_venta():
         descuento_porcentaje = float(descuento_porcentaje)
 
         precio_base_usd = producto.precio_usd
+        if precio_override_usd is not None:
+            precio_base_usd = precio_override_usd
         precio_final_usd = precio_base_usd * (1 - descuento_porcentaje / 100)
         precio_final_usd = round(precio_final_usd, 2)
 
@@ -2273,52 +2302,34 @@ def registrar_venta():
             'precio_final_usd': precio_final_usd
         })
 
-    # --- DETERMINAR MONEDA, TASA Y TOTAL COBRO ---
+    # --- DETERMINAR MONEDA, TASA Y FACTOR DE AJUSTE ---
     if metodo_cobro == 'usd':
         tasa_aplicada = 1.0
         moneda_cobro = 'USD'
-        total_cobro = subtotal_usd
-        subtotal_ves = subtotal_usd * tasa_usd
         factor_ajuste = 1.0
     elif metodo_cobro == 'bcv_usd':
         tasa_aplicada = tasa_usd
         moneda_cobro = 'VES'
-        total_cobro = subtotal_usd * tasa_usd
-        subtotal_ves = total_cobro
         factor_ajuste = 1.0
     elif metodo_cobro == 'bcv_eur':
         tasa_aplicada = tasa_eur
         moneda_cobro = 'VES'
-        total_cobro = subtotal_usd * tasa_eur
-        subtotal_ves = total_cobro
-        factor_ajuste = 1.0
+        factor_ajuste = (tasa_eur / tasa_usd) if tasa_usd > 0 else 1.0
     elif metodo_cobro == 'personalizada':
         tasa_aplicada = tasa_personalizada
         moneda_cobro = 'VES'
-        total_cobro = round(subtotal_usd * tasa_personalizada, 2)   # Monto en VES que el cliente paga
-        subtotal_ves = round(subtotal_usd * tasa_usd, 2)
-        # 🔥 CORRECCIÓN CRÍTICA: factor de ajuste para precios unitarios
-        factor_ajuste = tasa_personalizada / tasa_usd if tasa_usd > 0 else 1.0
+        factor_ajuste = (tasa_personalizada / tasa_usd) if tasa_usd > 0 else 1.0
     elif metodo_cobro == 'bs_personalizado':
-        # 🔥 CORRECCIÓN: total_cobro es el monto en Bs ingresado por el usuario (ej: 68000)
-        total_cobro = data.get('total_cobro', subtotal_usd * tasa_personalizada)
-        # factor_ajuste se usa solo para los precios unitarios de los detalles
-        factor_ajuste = total_cobro / subtotal_usd if subtotal_usd > 0 else 1.0
-        tasa_aplicada = factor_ajuste * tasa_usd if subtotal_usd > 0 else tasa_usd
+        tasa_aplicada = tasa_usd
         moneda_cobro = 'VES'
-        # ✅ CORRECCIÓN: subtotal_ves se calcula a partir del subtotal en USD (con descuentos) y la tasa BCV USD
-        subtotal_ves = round(subtotal_usd * tasa_usd, 2)
+        factor_ajuste = 1.0
     elif metodo_cobro == 'usd_personalizado':
-        total_cobro = data.get('total_cobro', subtotal_usd)
-        factor_ajuste = total_cobro / subtotal_usd if subtotal_usd > 0 else 1.0
         tasa_aplicada = 1.0
         moneda_cobro = 'USD'
-        subtotal_ves = total_cobro * tasa_usd
+        factor_ajuste = 1.0
     else:
         tasa_aplicada = 1.0
         moneda_cobro = 'USD'
-        total_cobro = subtotal_usd
-        subtotal_ves = subtotal_usd * tasa_usd
         factor_ajuste = 1.0
 
     # ============================================================
@@ -2327,23 +2338,31 @@ def registrar_venta():
     iva_porcentaje_cfg = Configuracion.query.filter_by(clave='ticket_iva_porcentaje').first()
     iva_porcentaje = float(iva_porcentaje_cfg.valor if iva_porcentaje_cfg else 0)
 
-    if iva_porcentaje > 0:
-        monto_iva_ves = subtotal_ves * (iva_porcentaje / 100)
-        total_ves_final = subtotal_ves + monto_iva_ves
-    else:
-        total_ves_final = subtotal_ves
+    # ============================================================
+    # TOTALES DEFINITIVOS (calculados UNA sola vez, antes de persistir)
+    # El ticket legal expresa siempre el equivalente a la tasa BCV USD.
+    # ============================================================
+    total_usd_ajustado = 0.0
+    for item_data in items_data:
+        total_usd_ajustado += round(item_data['precio_final_usd'] * factor_ajuste, 2) * item_data['cantidad']
+    total_usd_ajustado = round(total_usd_ajustado, 2)
 
-    # Si el método de cobro es en VES, el total_cobro debe ser total_ves_final
+    subtotal_ves = round(total_usd_ajustado * tasa_usd, 2)
+    monto_iva_ves = round(subtotal_ves * (iva_porcentaje / 100), 2) if iva_porcentaje > 0 else 0.0
+    total_ves_final = round(subtotal_ves + monto_iva_ves, 2)
+
     if moneda_cobro == 'VES':
         total_cobro = total_ves_final
+    else:
+        total_cobro = round(total_usd_ajustado + (total_usd_ajustado * iva_porcentaje / 100), 2)
 
     # Crear la venta
     venta = Venta(
         cliente_id=cliente_id,
         numero_ticket=nuevo_ticket,
-        total_usd=subtotal_usd,
+        total_usd=total_usd_ajustado,
         total_ves=total_ves_final,  # ← AHORA CON IVA INCLUIDO
-        total_eur=subtotal_usd * tasa_eur,
+        total_eur=round(total_usd_ajustado * tasa_usd / tasa_eur, 2) if tasa_eur > 0 else 0.0,
         tasa_bcv_usd=tasa_usd,
         tasa_bcv_eur=tasa_eur,
         tasa_personalizada=tasa_personalizada,
@@ -2352,7 +2371,7 @@ def registrar_venta():
         tasa_aplicada=tasa_aplicada,
         moneda_cobro=moneda_cobro,
         total_cobro=total_cobro,   # ← AHORA CON IVA INCLUIDO si es VES
-        subtotal_usd=subtotal_usd,
+        subtotal_usd=total_usd_ajustado,
         subtotal_ves=subtotal_ves,  # ← BASE IMPONIBLE SIN IVA
         es_apartado=es_apartado,
         apartado_id=apartado_id,
@@ -2369,21 +2388,10 @@ def registrar_venta():
         precio_base = item_data['precio_base_usd']
         precio_final = item_data['precio_final_usd']
 
-        precio_unitario_usd_ajustado = precio_final * factor_ajuste
-        precio_unitario_usd_ajustado = round(precio_unitario_usd_ajustado, 2)
-
-        if moneda_cobro == 'VES':
-            if metodo_cobro in ['personalizada', 'bs_personalizado']:
-                proporcion = precio_final / subtotal_usd if subtotal_usd > 0 else 0
-                precio_ves_unitario = total_cobro * proporcion
-                precio_ves_unitario = round(precio_ves_unitario, 2)
-            else:
-                precio_ves_unitario = precio_unitario_usd_ajustado * tasa_aplicada
-                precio_ves_unitario = round(precio_ves_unitario, 2)
-            precio_unitario_usd_ajustado = round(precio_ves_unitario / tasa_usd, 2) if tasa_usd > 0 else precio_unitario_usd_ajustado
-        else:
-            precio_ves_unitario = precio_unitario_usd_ajustado * tasa_usd
-            precio_ves_unitario = round(precio_ves_unitario, 2)
+        # Precio unitario definitivo: se aplica el factor UNA sola vez y no se reescribe.
+        precio_unitario_usd_ajustado = round(precio_final * factor_ajuste, 2)
+        # El precio en VES del detalle es siempre el equivalente BCV del precio en USD del ticket.
+        precio_ves_unitario = round(precio_unitario_usd_ajustado * tasa_usd, 2)
 
         producto.stock -= cantidad
         db.session.add(producto)
@@ -2398,22 +2406,6 @@ def registrar_venta():
             precio_original_usd=precio_base
         )
         db.session.add(detalle)
-
-    # Recalcular totales USD basados en los precios ajustados de los detalles
-    total_usd_ajustado = sum(d.precio_unitario_usd * d.cantidad for d in venta.detalles)
-    venta.total_usd = round(total_usd_ajustado, 2)
-    venta.subtotal_usd = round(total_usd_ajustado, 2)
-
-    # ✅ CORREGIDO: Recalcular subtotal_ves y total_ves con precios ajustados
-    venta.subtotal_ves = round(total_usd_ajustado * tasa_usd, 2)
-    if iva_porcentaje > 0:
-        monto_iva_ves = venta.subtotal_ves * (iva_porcentaje / 100)
-        venta.total_ves = venta.subtotal_ves + monto_iva_ves
-    else:
-        venta.total_ves = venta.subtotal_ves
-
-    if moneda_cobro == 'VES':
-        venta.total_cobro = venta.total_ves
 
     db.session.commit()
 

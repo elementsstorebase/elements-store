@@ -398,7 +398,8 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!item) return 0;
         const descuento = item.descuento || 0;
         const base = precioBaseOverride !== undefined ? precioBaseOverride : item.precio;
-        return base * (1 - descuento / 100);
+        // Mismo redondeo que el backend (precio_final_usd = round(base*(1-desc/100), 2))
+        return Number((base * (1 - descuento / 100)).toFixed(2));
     }
 
     // ---------- RECALCULAR FACTOR DE AJUSTE ----------
@@ -435,9 +436,8 @@ document.addEventListener('DOMContentLoaded', function() {
         let subtotalUsdAjustado = subtotalUsdOriginal;
 
         if (tasaSeleccionada === 'personalizada') {
-            const totalBs = subtotalUsdOriginal * tasaPersonalizada;
-            subtotalUsdAjustado = totalBs / tasaUsd;
-            factorAjuste = subtotalUsdAjustado / subtotalUsdOriginal;
+            // Mismo factor que aplica el backend: tasaPersonalizada / tasaUsd
+            factorAjuste = (tasaUsd > 0) ? (tasaPersonalizada / tasaUsd) : 1;
         } else if (tasaSeleccionada === 'bs_personalizado') {
             // Ya tenemos el precio base personalizado, no se necesita factor extra
             factorAjuste = 1;
@@ -483,7 +483,7 @@ document.addEventListener('DOMContentLoaded', function() {
             } else if (usarPrecioUsdPersonalizado) {
                 precioBase = montoUsdPersonalizado;
             }
-            const precioConDesc = precioBase * (1 - (item.descuento || 0) / 100);
+            const precioConDesc = Number((precioBase * (1 - (item.descuento || 0) / 100)).toFixed(2));
             const precioEfectivo = Number((precioConDesc * factorAjuste).toFixed(2));
             const subtotal = Number((precioEfectivo * item.cantidad).toFixed(2));
             total += subtotal;
@@ -705,7 +705,7 @@ document.addEventListener('DOMContentLoaded', function() {
             } else if (usarPrecioUsdPersonalizado) {
                 precioBase = montoUsdPersonalizado;
             }
-            const precioConDesc = precioBase * (1 - (item.descuento || 0) / 100);
+            const precioConDesc = Number((precioBase * (1 - (item.descuento || 0) / 100)).toFixed(2));
             const precioEfectivo = Number((precioConDesc * factorAjuste).toFixed(2));
             const subtotalItem = Number((precioEfectivo * item.cantidad).toFixed(2));
             subtotalUsd += subtotalItem;
@@ -732,17 +732,20 @@ document.addEventListener('DOMContentLoaded', function() {
                 tasaAplicada = tasaUsd;
                 break;
             case 'bcv_eur':
-                subtotalVes = subtotalUsd * tasaEur;
-                totalMostrar = subtotalUsd * tasaEur;
+                // subtotalUsd ya viene multiplicado por factorAjuste (tasaEur/tasaUsd).
+                // Convertir de nuevo por tasaEur duplicaba el ajuste.
+                subtotalVes = subtotalUsd * tasaUsd;
+                totalMostrar = subtotalVes;
                 simbolo = 'Bs ';
-                tasaAplicada = tasaEur;
+                tasaAplicada = tasaUsd;
                 break;
             case 'personalizada':
-                // ✅ CORRECCIÓN: Subtotal VES con tasa BCV, TOTAL = Subtotal VES (más IVA si aplica)
+                // El ticket expresa SIEMPRE el equivalente a la tasa BCV.
+                // La tasa personalizada ya está incorporada en el precio unitario vía factorAjuste.
                 subtotalVes = subtotalUsd * tasaUsd;
-                totalMostrar = subtotalVes;               // ¡Ahora el TOTAL es el equivalente BCV!
+                totalMostrar = subtotalVes;
                 simbolo = 'Bs ';
-                tasaAplicada = tasaUsd;                   // Mostrar la tasa BCV, no la personalizada
+                tasaAplicada = tasaUsd;
                 break;
             case 'bs_personalizado':
                 // ✅ CORRECTO: El total en Bs = subtotalUsd * tasaUsd (con descuentos aplicados)
@@ -757,6 +760,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 simbolo = '$';
                 tasaAplicada = tasaUsd;
                 break;
+        }
+
+        // El IVA se suma UNA sola vez sobre la base imponible en VES.
+        const ivaPorcentajeTotal = configTicket.ivaPorcentaje || 0;
+        if (ivaPorcentajeTotal > 0 && simbolo !== '$') {
+            totalMostrar = subtotalVes + (subtotalVes * ivaPorcentajeTotal / 100);
+        } else if (ivaPorcentajeTotal > 0 && simbolo === '$') {
+            totalMostrar = subtotalUsd + (subtotalUsd * ivaPorcentajeTotal / 100);
         }
 
         // ---------- RENDERIZAR ITEMS DEL TICKET ----------
@@ -790,7 +801,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 } else if (usarPrecioUsdPersonalizado) {
                     precioBase = montoUsdPersonalizado;
                 }
-                const precioConDesc = precioBase * (1 - (item.descuento || 0) / 100);
+                const precioConDesc = Number((precioBase * (1 - (item.descuento || 0) / 100)).toFixed(2));
                 const precioEfectivo = Number((precioConDesc * factorAjuste).toFixed(2));
                 const subtotalItem = Number((precioEfectivo * item.cantidad).toFixed(2));
                 subtotalUsdDisplay += subtotalItem;
@@ -998,27 +1009,11 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         if (tasaSeleccionada === 'bs_personalizado') {
-            // Calcular total en Bs con descuentos aplicados
-            let precioBaseUsd = null;
-            const montoBs = parseMontoVES(bsPersonalizadoInput.value) || 0;
-            if (montoBs > 0 && tasaUsd > 0) {
-                precioBaseUsd = montoBs / tasaUsd;
-            }
-            let totalUsd = 0;
-            carrito.forEach(item => {
-                const base = precioBaseUsd !== null ? precioBaseUsd : item.precio;
-                const precioConDesc = base * (1 - (item.descuento || 0) / 100);
-                totalUsd += precioConDesc * item.cantidad;
-            });
-            data.total_cobro = totalUsd * tasaUsd;
+            // Se envia el PRECIO UNITARIO en Bs; el backend deriva el precio base en USD.
+            data.precio_base_bs = parseMontoVES(bsPersonalizadoInput.value) || 0;
         } else if (tasaSeleccionada === 'usd_personalizado') {
-            let total = 0;
-            carrito.forEach(item => {
-                let precioBase = montoUsdPersonalizado;
-                const precioConDesc = precioBase * (1 - (item.descuento || 0) / 100);
-                total += precioConDesc * item.cantidad;
-            });
-            data.total_cobro = total;
+            // Se envia el PRECIO UNITARIO en USD impuesto por el usuario.
+            data.precio_base_usd = montoUsdPersonalizado;
         }
 
         return fetch('/api/ventas', {
@@ -1181,26 +1176,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 };
 
                 if (tasaSeleccionada === 'bs_personalizado') {
-                    let precioBaseUsd = null;
-                    const montoBs = parseMontoVES(bsPersonalizadoInput.value) || 0;
-                    if (montoBs > 0 && tasaUsd > 0) {
-                        precioBaseUsd = montoBs / tasaUsd;
-                    }
-                    let totalUsd = 0;
-                    carrito.forEach(item => {
-                        const base = precioBaseUsd !== null ? precioBaseUsd : item.precio;
-                        const precioConDesc = base * (1 - (item.descuento || 0) / 100);
-                        totalUsd += precioConDesc * item.cantidad;
-                    });
-                    data.total_cobro = totalUsd * tasaUsd;
+                    // Se envia el PRECIO UNITARIO en Bs; el backend deriva el precio base en USD.
+                    data.precio_base_bs = parseMontoVES(bsPersonalizadoInput.value) || 0;
                 } else if (tasaSeleccionada === 'usd_personalizado') {
-                    let total = 0;
-                    carrito.forEach(item => {
-                        let precioBase = montoUsdPersonalizado;
-                        const precioConDesc = precioBase * (1 - (item.descuento || 0) / 100);
-                        total += precioConDesc * item.cantidad;
-                    });
-                    data.total_cobro = total;
+                    // Se envia el PRECIO UNITARIO en USD impuesto por el usuario.
+                    data.precio_base_usd = montoUsdPersonalizado;
                 }
 
                 return fetch('/api/ventas', {
@@ -1328,26 +1308,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 };
 
                 if (tasaSeleccionada === 'bs_personalizado') {
-                    let precioBaseUsd = null;
-                    const montoBs = parseMontoVES(bsPersonalizadoInput.value) || 0;
-                    if (montoBs > 0 && tasaUsd > 0) {
-                        precioBaseUsd = montoBs / tasaUsd;
-                    }
-                    let totalUsd = 0;
-                    carrito.forEach(item => {
-                        const base = precioBaseUsd !== null ? precioBaseUsd : item.precio;
-                        const precioConDesc = base * (1 - (item.descuento || 0) / 100);
-                        totalUsd += precioConDesc * item.cantidad;
-                    });
-                    data.total_cobro = totalUsd * tasaUsd;
+                    // Se envia el PRECIO UNITARIO en Bs; el backend deriva el precio base en USD.
+                    data.precio_base_bs = parseMontoVES(bsPersonalizadoInput.value) || 0;
                 } else if (tasaSeleccionada === 'usd_personalizado') {
-                    let total = 0;
-                    carrito.forEach(item => {
-                        let precioBase = montoUsdPersonalizado;
-                        const precioConDesc = precioBase * (1 - (item.descuento || 0) / 100);
-                        total += precioConDesc * item.cantidad;
-                    });
-                    data.total_cobro = total;
+                    // Se envia el PRECIO UNITARIO en USD impuesto por el usuario.
+                    data.precio_base_usd = montoUsdPersonalizado;
                 }
 
                 return fetch('/api/ventas', {
@@ -1443,26 +1408,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 };
 
                 if (tasaSeleccionada === 'bs_personalizado') {
-                    let precioBaseUsd = null;
-                    const montoBs = parseMontoVES(bsPersonalizadoInput.value) || 0;
-                    if (montoBs > 0 && tasaUsd > 0) {
-                        precioBaseUsd = montoBs / tasaUsd;
-                    }
-                    let totalUsd = 0;
-                    carrito.forEach(item => {
-                        const base = precioBaseUsd !== null ? precioBaseUsd : item.precio;
-                        const precioConDesc = base * (1 - (item.descuento || 0) / 100);
-                        totalUsd += precioConDesc * item.cantidad;
-                    });
-                    data.total_cobro = totalUsd * tasaUsd;
+                    // Se envia el PRECIO UNITARIO en Bs; el backend deriva el precio base en USD.
+                    data.precio_base_bs = parseMontoVES(bsPersonalizadoInput.value) || 0;
                 } else if (tasaSeleccionada === 'usd_personalizado') {
-                    let total = 0;
-                    carrito.forEach(item => {
-                        let precioBase = montoUsdPersonalizado;
-                        const precioConDesc = precioBase * (1 - (item.descuento || 0) / 100);
-                        total += precioConDesc * item.cantidad;
-                    });
-                    data.total_cobro = total;
+                    // Se envia el PRECIO UNITARIO en USD impuesto por el usuario.
+                    data.precio_base_usd = montoUsdPersonalizado;
                 }
 
                 return fetch('/api/ventas', {
@@ -1771,26 +1721,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 };
 
                 if (tasaSeleccionada === 'bs_personalizado') {
-                    let precioBaseUsd = null;
-                    const montoBs = parseMontoVES(bsPersonalizadoInput.value) || 0;
-                    if (montoBs > 0 && tasaUsd > 0) {
-                        precioBaseUsd = montoBs / tasaUsd;
-                    }
-                    let totalUsd = 0;
-                    carrito.forEach(item => {
-                        const base = precioBaseUsd !== null ? precioBaseUsd : item.precio;
-                        const precioConDesc = base * (1 - (item.descuento || 0) / 100);
-                        totalUsd += precioConDesc * item.cantidad;
-                    });
-                    data.total_cobro = totalUsd * tasaUsd;
+                    // Se envia el PRECIO UNITARIO en Bs; el backend deriva el precio base en USD.
+                    data.precio_base_bs = parseMontoVES(bsPersonalizadoInput.value) || 0;
                 } else if (tasaSeleccionada === 'usd_personalizado') {
-                    let total = 0;
-                    carrito.forEach(item => {
-                        let precioBase = montoUsdPersonalizado;
-                        const precioConDesc = precioBase * (1 - (item.descuento || 0) / 100);
-                        total += precioConDesc * item.cantidad;
-                    });
-                    data.total_cobro = total;
+                    // Se envia el PRECIO UNITARIO en USD impuesto por el usuario.
+                    data.precio_base_usd = montoUsdPersonalizado;
                 }
 
                 const ventaResp = await fetch('/api/ventas', {
@@ -1804,76 +1739,21 @@ document.addEventListener('DOMContentLoaded', function() {
                     throw new Error(errData.error || 'Error al registrar la venta');
                 }
 
-                // 🔥 CORRECCIÓN: Obtener el ID de la venta
                 const ventaData = await ventaResp.json();
-                const ventaId = ventaData.venta_id;
-
-                if (!ventaId) {
-                    throw new Error('No se pudo obtener el ID de la venta');
-                }
-
-                // 🔥 Obtener el detalle completo de la venta
-                const detalleResp = await fetch(`/api/ventas/${ventaId}`);
-                if (!detalleResp.ok) {
-                    throw new Error('Error al obtener el detalle de la venta');
-                }
-                const detalleData = await detalleResp.json();
-
-                // 🔥 Obtener la configuración del ticket
-                const configResp = await fetch('/api/config/ticket');
-                const configTicketData = await configResp.json();
-
-                // Convertir los items del detalle al formato que espera imprimirTicketUSB
-                const detalles = detalleData.items.map(item => ({
-                    nombre_producto: item.producto_nombre,
-                    cantidad: item.cantidad,
-                    precio_unitario_efectivo_usd: item.precio_unitario_usd,
-                    total_linea_usd: item.subtotal_usd,
-                    descuento_porcentaje: item.descuento_porcentaje || 0
-                }));
-
-                const venta = {
-                    id: detalleData.id,
-                    numero_ticket: detalleData.numero_ticket,
-                    total_usd: detalleData.total_usd,
-                    subtotal_ves: detalleData.subtotal_ves,
-                    total_ves: detalleData.total_ves,
-                    tasa_bcv: detalleData.tasa_aplicada || tasaUsd,
-                    metodo_pago: detalleData.metodo_pago,
-                    fecha_formateada: detalleData.fecha
-                };
-
-                const cliente = {
-                    nombre_completo: detalleData.cliente,
-                    cedula: detalleData.cedula,
-                    telefono: detalleData.telefono,
-                    direccion: detalleData.direccion
-                };
-
-                // Configuración del ticket (mapa de nombres)
-                const configTicketMapped = {
-                    nombre_tienda: configTicketData.ticket_tienda_nombre || 'ELEMENTS STORE',
-                    telefono_tienda: configTicketData.ticket_telefono_tienda || '0412-1234567',
-                    direccion_tienda: configTicketData.ticket_direccion_tienda || 'Calle Principal, Local 1, Ciudad',
-                    mostrar_telefono: configTicketData.ticket_mostrar_telefono !== 'false',
-                    mostrar_direccion_tienda: configTicketData.ticket_mostrar_direccion_tienda !== 'false',
-                    mostrar_direccion_cliente: configTicketData.ticket_mostrar_direccion_cliente !== 'false',
-                    mostrar_url_web: true,
-                    url_web: configTicketData.ticket_url || 'www.elementsstore.com',
-                    mensaje_agradecimiento: configTicketData.ticket_mensaje || '¡Gracias por su compra!',
-                    porcentaje_iva: parseFloat(configTicketData.ticket_iva_porcentaje) || 0
-                };
+                const { venta, detalles, cliente, config_ticket } = ventaData;
 
                 if (typeof window.imprimirTicketUSB === 'function') {
-                    numeroTicket = String(venta.numero_ticket).padStart(5, '0');
-                    if (ticketNumero) ticketNumero.textContent = numeroTicket;
+                    if (venta.numero_ticket) {
+                        numeroTicket = String(venta.numero_ticket).padStart(5, '0');
+                        if (ticketNumero) ticketNumero.textContent = numeroTicket;
+                    }
 
                     alert('✅ Venta registrada exitosamente. Enviando ticket a la impresora...');
                     await window.imprimirTicketUSB({
                         venta: venta,
                         detalles: detalles,
                         cliente: cliente,
-                        configTicket: configTicketMapped
+                        configTicket: config_ticket
                     });
 
                     limpiarVenta();
@@ -1894,4 +1774,344 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     setTimeout(agregarBotonUSB, 500);
+});
+tickets.js
+/**
+ * Módulo de Listado de Tickets
+ * Permite listar, filtrar, ver detalles y eliminar ventas (tickets).
+ */
+
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('🟢 tickets.js cargado correctamente');
+
+    // ---------- REFERENCIAS ----------
+    const filtroTicket = document.getElementById('filtro-ticket');
+    const filtroFechaDesde = document.getElementById('filtro-fecha-desde');
+    const filtroFechaHasta = document.getElementById('filtro-fecha-hasta');
+    const btnFiltrar = document.getElementById('btn-filtrar');
+    const btnLimpiar = document.getElementById('btn-limpiar');
+    const tbody = document.getElementById('tabla-tickets-body');
+
+    // Modal
+    const modal = document.getElementById('modal-detalle');
+    const modalCerrar = document.getElementById('modal-cerrar');
+    const modalCerrarBtn = document.getElementById('modal-cerrar-btn');
+    const modalTicketNumero = document.getElementById('modal-ticket-numero');
+    const modalContenido = document.getElementById('modal-contenido');
+    const modalDescargarPng = document.getElementById('modal-descargar-png');
+
+    let ventaIdActual = null;
+
+    // ---------- FUNCIÓN DE FORMATEO UNIFICADA ----------
+    function formatearMonto(monto) {
+        if (monto === undefined || monto === null || isNaN(monto)) return '0,00';
+        let montoStr = monto.toFixed(2);
+        let partes = montoStr.split('.');
+        let enteros = partes[0];
+        let decimales = partes[1];
+        let enterosFormateados = enteros.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+        return `${enterosFormateados},${decimales}`;
+    }
+
+    // ---------- FUNCIONES ----------
+    function cargarVentas(filtros = {}) {
+        const params = new URLSearchParams();
+        if (filtros.numero_ticket) params.append('numero_ticket', filtros.numero_ticket);
+        if (filtros.fecha_desde) params.append('fecha_desde', filtros.fecha_desde);
+        if (filtros.fecha_hasta) params.append('fecha_hasta', filtros.fecha_hasta);
+
+        const url = `/api/ventas?${params.toString()}`;
+        console.log('📡 Cargando ventas desde:', url);
+
+        tbody.innerHTML = `<tr><td colspan="9" class="px-6 py-4 text-center text-gray-400">Cargando tickets...</td></tr>`;
+
+        fetch(url)
+            .then(response => {
+                console.log('📨 Respuesta recibida, status:', response.status);
+                if (!response.ok) throw new Error(`Error HTTP: ${response.status} - ${response.statusText}`);
+                return response.json();
+            })
+            .then(data => {
+                console.log('✅ Datos recibidos:', data.length, 'ventas');
+                renderTabla(data);
+            })
+            .catch(err => {
+                console.error('❌ Error al cargar ventas:', err.message);
+                tbody.innerHTML = `<tr><td colspan="9" class="px-6 py-4 text-center text-red-500">Error al cargar los tickets: ${err.message}</td></tr>`;
+            });
+    }
+
+    function renderTabla(ventas) {
+        if (!ventas || ventas.length === 0) {
+            console.warn('⚠️ No hay ventas para mostrar');
+            tbody.innerHTML = `<tr><td colspan="9" class="px-6 py-4 text-center text-gray-400">No hay tickets para mostrar</td></tr>`;
+            return;
+        }
+
+        let html = '';
+        ventas.forEach(v => {
+            const fecha = new Date(v.fecha);
+            const fechaFormateada = fecha.toLocaleString('es-VE', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+
+            html += `
+                <tr class="hover:bg-gray-50 transition-colors">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${String(v.numero_ticket).padStart(5, '0')}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${fechaFormateada}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${v.cliente}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${v.cedula || '-'}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">$${formatearMonto(v.total_usd)}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">Bs ${formatearMonto(v.total_ves)}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-500">${v.metodo_pago || '-'}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-500">${v.metodo_cobro || '-'}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-center">
+                        <div class="flex justify-center space-x-2">
+                            <button class="btn-ver-ticket text-indigo-600 hover:text-indigo-900 font-medium" data-id="${v.id}">
+                                Ver
+                            </button>
+                            <button class="btn-eliminar-ticket text-red-600 hover:text-red-900 font-medium" data-id="${v.id}" title="Eliminar venta y reintegrar stock">
+                                Eliminar
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        });
+
+        tbody.innerHTML = html;
+
+        // Listeners para botones Ver
+        document.querySelectorAll('.btn-ver-ticket').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const id = this.dataset.id;
+                abrirDetalle(id);
+            });
+        });
+
+        // Listeners para botones Eliminar
+        document.querySelectorAll('.btn-eliminar-ticket').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const id = this.dataset.id;
+                const fila = this.closest('tr');
+                confirmarEliminarTicket(id, fila);
+            });
+        });
+    }
+
+    function confirmarEliminarTicket(ventaId, fila) {
+        // Confirmación con cuadro de diálogo nativo
+        if (!confirm('¿Está seguro de eliminar este ticket?\n\n⚠️ Esta acción es irreversible: se eliminará la venta y se reintegrará el stock al inventario. La información financiera asociada desaparecerá de los reportes.')) {
+            return;
+        }
+
+        // Deshabilitar botones mientras se procesa
+        const botones = fila.querySelectorAll('button');
+        botones.forEach(b => b.disabled = true);
+
+        // Mostrar estado en la fila
+        const celdaAccion = fila.lastElementChild;
+        const textoOriginal = celdaAccion.innerHTML;
+        celdaAccion.innerHTML = '<span class="text-yellow-600 text-xs">Eliminando...</span>';
+
+        fetch(`/api/ventas/${ventaId}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(err => { throw new Error(err.error || 'Error del servidor'); });
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log('✅ Ticket eliminado:', data.mensaje);
+            // Remover la fila de la tabla con una pequeña animación
+            fila.style.transition = 'opacity 0.3s';
+            fila.style.opacity = '0';
+            setTimeout(() => {
+                fila.remove();
+                // Si no quedan filas, mostrar mensaje
+                if (tbody.querySelectorAll('tr').length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="9" class="px-6 py-4 text-center text-gray-400">No hay tickets para mostrar</td></tr>`;
+                }
+            }, 300);
+        })
+        .catch(err => {
+            console.error('❌ Error al eliminar ticket:', err.message);
+            alert('Error al eliminar el ticket: ' + err.message);
+            // Restaurar botones y texto original
+            celdaAccion.innerHTML = textoOriginal;
+            botones.forEach(b => b.disabled = false);
+        });
+    }
+
+    function abrirDetalle(ventaId) {
+        ventaIdActual = ventaId;
+        modal.classList.remove('hidden');
+        modalTicketNumero.textContent = '';
+        modalContenido.innerHTML = '<div class="text-center py-4">Cargando detalles...</div>';
+        modalDescargarPng.disabled = true;
+
+        fetch(`/api/ventas/${ventaId}`)
+            .then(response => {
+                if (!response.ok) throw new Error('Error al cargar detalle');
+                return response.json();
+            })
+            .then(data => {
+                renderDetalle(data);
+                modalTicketNumero.textContent = `#${String(data.numero_ticket).padStart(5, '0')}`;
+                modalDescargarPng.disabled = false;
+            })
+            .catch(err => {
+                console.error('❌ Error en detalle:', err);
+                modalContenido.innerHTML = `<div class="text-center py-4 text-red-500">Error al cargar detalle: ${err.message}</div>`;
+            });
+    }
+
+    function renderDetalle(data) {
+        const fecha = new Date(data.fecha);
+        const fechaFormateada = fecha.toLocaleString('es-VE', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        });
+
+        let itemsHtml = '';
+        data.items.forEach(item => {
+            const subtotalUsd = item.subtotal_usd || 0;
+            const subtotalVes = item.subtotal_ves || 0;
+            const descuento = item.descuento_porcentaje || 0;
+            const nombreProducto = descuento > 0 ? `${item.producto_nombre} (${descuento}% off)` : item.producto_nombre;
+
+            itemsHtml += `
+                <tr class="hover:bg-gray-50 transition-colors">
+                    <td class="px-4 py-2 text-sm text-gray-900">${nombreProducto}</td>
+                    <td class="px-4 py-2 text-sm text-center text-gray-900">${item.cantidad}</td>
+                    <td class="px-4 py-2 text-sm text-right text-gray-900">$${formatearMonto(item.precio_unitario_usd)}</td>
+                    <td class="px-4 py-2 text-sm text-right text-gray-900">Bs ${formatearMonto(item.precio_unitario_ves)}</td>
+                    <td class="px-4 py-2 text-sm text-right text-gray-900">$${formatearMonto(subtotalUsd)}</td>
+                    <td class="px-4 py-2 text-sm text-right text-gray-900">Bs ${formatearMonto(subtotalVes)}</td>
+                </tr>
+            `;
+        });
+
+        const html = `
+            <div class="grid grid-cols-2 gap-4 mb-4 text-gray-900">
+                <div><span class="font-medium">Cliente:</span> ${data.cliente}</div>
+                <div><span class="font-medium">Cédula:</span> ${data.cedula || '-'}</div>
+                <div><span class="font-medium">Teléfono:</span> ${data.telefono || '-'}</div>
+                <div><span class="font-medium">Dirección:</span> ${data.direccion || '-'}</div>
+                <div><span class="font-medium">Fecha:</span> ${fechaFormateada}</div>
+                <div><span class="font-medium">Método Pago:</span> ${data.metodo_pago || '-'}</div>
+                <div><span class="font-medium">Método Cobro:</span> ${data.metodo_cobro || '-'}</div>
+                <div><span class="font-medium">Moneda Cobro:</span> ${data.moneda_cobro || '-'}</div>
+                <div><span class="font-medium">Tasa Aplicada:</span> ${data.tasa_aplicada ? formatearMonto(data.tasa_aplicada) : '-'}</div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Producto</th>
+                            <th class="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase">Cant</th>
+                            <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Precio USD</th>
+                            <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Precio VES</th>
+                            <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Subtotal USD</th>
+                            <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Subtotal VES</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        ${itemsHtml}
+                    </tbody>
+                    <tfoot class="bg-gray-50">
+                        <tr>
+                            <td colspan="4" class="px-4 py-2 text-right font-medium text-gray-900">Totales:</td>
+                            <td class="px-4 py-2 text-right font-bold text-gray-900">$${formatearMonto(data.total_usd)}</td>
+                            <td class="px-4 py-2 text-right font-bold text-gray-900">Bs ${formatearMonto(data.total_ves)}</td>
+                        </tr>
+                        <tr>
+                            <td colspan="5" class="px-4 py-2 text-right font-medium text-gray-900">Total Cobrado (${data.moneda_cobro}):</td>
+                            <td class="px-4 py-2 text-right font-bold text-gray-900">
+                                ${data.moneda_cobro === 'USD' ? '$' : 'Bs '} ${formatearMonto(data.total_cobro)}
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        `;
+
+        modalContenido.innerHTML = html;
+    }
+
+    function descargarPng() {
+        if (!ventaIdActual) return;
+        window.location.href = `/api/generar-ticket/${ventaIdActual}`;
+    }
+
+    function limpiarFiltros() {
+        filtroTicket.value = '';
+        filtroFechaDesde.value = '';
+        filtroFechaHasta.value = '';
+        cargarVentas({});
+    }
+
+    function aplicarFiltros() {
+        const filtros = {};
+        const ticket = filtroTicket.value.trim();
+        if (ticket) filtros.numero_ticket = ticket;
+
+        const desde = filtroFechaDesde.value;
+        if (desde) filtros.fecha_desde = desde;
+
+        const hasta = filtroFechaHasta.value;
+        if (hasta) filtros.fecha_hasta = hasta;
+
+        console.log('🔍 Aplicando filtros:', filtros);
+        cargarVentas(filtros);
+    }
+
+    // ---------- INICIALIZACIÓN ----------
+    function init() {
+        console.log('📅 Cargando todos los tickets sin filtro de fecha');
+        cargarVentas({});
+    }
+
+    // ---------- EVENTOS ----------
+    btnFiltrar.addEventListener('click', aplicarFiltros);
+    btnLimpiar.addEventListener('click', limpiarFiltros);
+
+    filtroTicket.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') aplicarFiltros();
+    });
+    filtroFechaDesde.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') aplicarFiltros();
+    });
+    filtroFechaHasta.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') aplicarFiltros();
+    });
+
+    modalCerrar.addEventListener('click', function() {
+        modal.classList.add('hidden');
+    });
+    modalCerrarBtn.addEventListener('click', function() {
+        modal.classList.add('hidden');
+    });
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) {
+            modal.classList.add('hidden');
+        }
+    });
+
+    modalDescargarPng.addEventListener('click', descargarPng);
+
+    init();
 });
