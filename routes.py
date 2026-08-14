@@ -2295,8 +2295,8 @@ def registrar_venta():
     elif metodo_cobro == 'personalizada':
         tasa_aplicada = tasa_personalizada
         moneda_cobro = 'VES'
-        subtotal_ves = round(subtotal_usd * tasa_usd, 2)            # ✅ Equivalente BCV para el ticket
-        factor_ajuste = 1.0
+        subtotal_ves = round(subtotal_usd * tasa_usd, 2)            # Se recalculará abajo con precios ajustados
+        factor_ajuste = tasa_personalizada / tasa_usd if tasa_usd > 0 else 1.0
     elif metodo_cobro == 'bs_personalizado':
         # 🔥 CORRECCIÓN: total_cobro es el monto en Bs ingresado por el usuario (ej: 68000)
         total_cobro = data.get('total_cobro', subtotal_usd * tasa_personalizada)
@@ -2331,7 +2331,7 @@ def registrar_venta():
     else:
         total_ves_final = subtotal_ves
 
-    # ✅ CORREGIDO: Calcular total_cobro ANTES de crear la venta
+    # Si el método de cobro es en VES, el total_cobro debe ser total_ves_final
     if moneda_cobro == 'VES':
         total_cobro = total_ves_final
 
@@ -2401,6 +2401,17 @@ def registrar_venta():
     total_usd_ajustado = sum(d.precio_unitario_usd * d.cantidad for d in venta.detalles)
     venta.total_usd = round(total_usd_ajustado, 2)
     venta.subtotal_usd = round(total_usd_ajustado, 2)
+
+    # ✅ CORREGIDO: Recalcular subtotal_ves y total_ves con precios ajustados
+    venta.subtotal_ves = round(total_usd_ajustado * tasa_usd, 2)
+    if iva_porcentaje > 0:
+        monto_iva_ves = venta.subtotal_ves * (iva_porcentaje / 100)
+        venta.total_ves = venta.subtotal_ves + monto_iva_ves
+    else:
+        venta.total_ves = venta.subtotal_ves
+
+    if moneda_cobro == 'VES':
+        venta.total_cobro = venta.total_ves
 
     db.session.commit()
 

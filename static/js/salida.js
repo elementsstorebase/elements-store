@@ -484,8 +484,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 precioBase = montoUsdPersonalizado;
             }
             const precioConDesc = precioBase * (1 - (item.descuento || 0) / 100);
-            const precioEfectivo = precioConDesc * factorAjuste;
-            const subtotal = precioEfectivo * item.cantidad;
+            const precioEfectivo = Number((precioConDesc * factorAjuste).toFixed(2));
+            const subtotal = Number((precioEfectivo * item.cantidad).toFixed(2));
             total += subtotal;
 
             const tr = document.createElement('tr');
@@ -738,11 +738,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 tasaAplicada = tasaEur;
                 break;
             case 'personalizada':
-                // ✅ CORRECCIÓN: Subtotal VES y TOTAL con tasa BCV
+                // ✅ CORRECCIÓN: Subtotal VES con tasa BCV, TOTAL con tasa personalizada
                 subtotalVes = subtotalUsd * tasaUsd;
-                totalMostrar = subtotalVes;
+                totalMostrar = subtotalUsd * tasaPersonalizada;
                 simbolo = 'Bs ';
-                tasaAplicada = tasaUsd;
+                tasaAplicada = tasaPersonalizada;
                 break;
             case 'bs_personalizado':
                 // ✅ CORRECTO: El total en Bs = subtotalUsd * tasaUsd (con descuentos aplicados)
