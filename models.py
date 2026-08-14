@@ -123,7 +123,17 @@ class DetalleVenta(db.Model):
     precio_unitario_ves = db.Column(db.Float)
     descuento_porcentaje = db.Column(db.Float, nullable=True)
     precio_original_usd = db.Column(db.Float, nullable=True)
+    # 🔥 SNAPSHOT: copia del nombre del producto al momento de la venta.
+    # Permite borrar el producto del inventario sin perder el historial del ticket.
+    producto_nombre_hist = db.Column(db.String(150), nullable=True)
     producto = db.relationship('Producto', lazy=True)
+
+    @property
+    def producto_nombre_seguro(self):
+        """Nombre del producto, aunque ya se haya eliminado del inventario."""
+        if self.producto is not None:
+            return self.producto.nombre
+        return self.producto_nombre_hist or 'Producto eliminado'
 
 class Credito(db.Model):
     __tablename__ = 'creditos'
@@ -157,7 +167,11 @@ class Apartado(db.Model):
     cliente_nombre_hist = db.Column(db.String(120), nullable=True)
     cliente_cedula_hist = db.Column(db.String(20), nullable=True)
     cliente_telefono_hist = db.Column(db.String(20), nullable=True)
-    producto_id = db.Column(db.Integer, db.ForeignKey('productos.id', ondelete='CASCADE'), nullable=False)
+    # 🔥 CORREGIDO: antes era ondelete='CASCADE', lo que BORRABA el apartado entero
+    # (incluidos los finalizados) al eliminar el producto. Ahora se desvincula y el
+    # historial se conserva gracias al snapshot de abajo.
+    producto_id = db.Column(db.Integer, db.ForeignKey('productos.id', ondelete='SET NULL'), nullable=True)
+    producto_nombre_hist = db.Column(db.String(150), nullable=True)
     cantidad = db.Column(db.Integer, nullable=False)
     precio_unitario_usd = db.Column(db.Float, nullable=False)
     precio_unitario_ves = db.Column(db.Float, nullable=False)
@@ -208,6 +222,18 @@ class Apartado(db.Model):
     def total_abonado_valido(self):
         """Suma de abonos NO anulados (los reintegrados no cuentan)."""
         return round(sum(p.monto_usd for p in self.pagos if not p.anulado), 2)
+
+    @property
+    def producto_nombre_seguro(self):
+        """Nombre del producto, aunque ya se haya eliminado del inventario."""
+        if self.producto is not None:
+            return self.producto.nombre
+        return self.producto_nombre_hist or 'Producto eliminado'
+
+    @property
+    def producto_eliminado(self):
+        """True si el producto original ya no existe en el inventario."""
+        return self.producto is None
 
     __table_args__ = (
         db.Index('idx_apartado_estado', 'estado'),

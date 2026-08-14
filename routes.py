@@ -99,6 +99,12 @@ def migrar_apartados_y_pagos():
                 lista = ', '.join(cols)
                 db.session.execute(_sql_text("PRAGMA foreign_keys=OFF"))
                 db.session.execute(_sql_text("ALTER TABLE apartados RENAME TO apartados_old_mig"))
+                for _idx in ('idx_apartado_estado', 'idx_apartado_cliente_estado',
+                             'idx_apartado_fecha_limite'):
+                    try:
+                        db.session.execute(_sql_text(f"DROP INDEX IF EXISTS {_idx}"))
+                    except Exception:
+                        pass
                 db.session.commit()
                 # Recrear con el esquema del modelo actual (cliente_id NULL + SET NULL)
                 Apartado.__table__.create(db.engine)
@@ -154,6 +160,105 @@ def migrar_apartados_y_pagos():
                         'para que dejen de sumar en los reportes de Finanzas.'))
             db.session.commit()
             print(f"✅ {reintegrados_sucios} abono(s) regularizados: ya no suman en Finanzas.")
+
+        # ---------- 6. Eliminar productos conservando el histórico ----------
+        # a) snapshot del nombre del producto en ventas y apartados
+        # b) apartados.producto_id: NOT NULL + CASCADE -> NULL + SET NULL
+        #    (el CASCADE BORRABA apartados finalizados al eliminar un producto)
+        if 'producto_nombre_hist' not in [c['name'] for c in inspect(db.engine).get_columns('apartados')]:
+            print("🔧 Agregando 'producto_nombre_hist' a 'apartados'...")
+            _ejecutar("ALTER TABLE apartados ADD COLUMN producto_nombre_hist VARCHAR(150)")
+
+        if inspector.has_table('detalle_ventas'):
+            cols_dv = [c['name'] for c in inspect(db.engine).get_columns('detalle_ventas')]
+            if 'producto_nombre_hist' not in cols_dv:
+                print("🔧 Agregando 'producto_nombre_hist' a 'detalle_ventas'...")
+                _ejecutar("ALTER TABLE detalle_ventas ADD COLUMN producto_nombre_hist VARCHAR(150)")
+
+        # Rellenar el snapshot de los registros existentes
+        pend_ap = db.session.execute(_sql_text(
+            "SELECT COUNT(*) FROM apartados WHERE producto_nombre_hist IS NULL AND producto_id IS NOT NULL"
+        )).scalar()
+        if pend_ap:
+            print(f"🔧 Rellenando nombre de producto en {pend_ap} apartado(s)...")
+            db.session.execute(_sql_text("""
+                UPDATE apartados
+                   SET producto_nombre_hist = (SELECT p.nombre FROM productos p WHERE p.id = apartados.producto_id)
+                 WHERE producto_nombre_hist IS NULL AND producto_id IS NOT NULL
+            """))
+            db.session.commit()
+
+        if inspector.has_table('detalle_ventas'):
+            pend_dv = db.session.execute(_sql_text(
+                "SELECT COUNT(*) FROM detalle_ventas WHERE producto_nombre_hist IS NULL AND producto_id IS NOT NULL"
+            )).scalar()
+            if pend_dv:
+                print(f"🔧 Rellenando nombre de producto en {pend_dv} línea(s) de venta...")
+                db.session.execute(_sql_text("""
+                    UPDATE detalle_ventas
+                       SET producto_nombre_hist = (SELECT p.nombre FROM productos p WHERE p.id = detalle_ventas.producto_id)
+                     WHERE producto_nombre_hist IS NULL AND producto_id IS NOT NULL
+                """))
+                db.session.commit()
+                print("✅ Nombres de producto respaldados.")
+
+        # producto_id: permitir NULL y cambiar CASCADE -> SET NULL
+        if not es_pg:
+            insp_p = inspect(db.engine)
+            col_prod = next((c for c in insp_p.get_columns('apartados')
+                             if c['name'] == 'producto_id'), None)
+            if col_prod is not None and not col_prod.get('nullable', True):
+                print("🔧 [SQLite] Reconstruyendo 'apartados' para permitir producto_id NULL...")
+                cols = [c['name'] for c in insp_p.get_columns('apartados')]
+                lista = ', '.join(cols)
+                db.session.execute(_sql_text("PRAGMA foreign_keys=OFF"))
+                db.session.execute(_sql_text("ALTER TABLE apartados RENAME TO apartados_old_p"))
+                # Los índices siguen ligados a la tabla renombrada: hay que soltarlos
+                # o Apartado.__table__.create() falla con "index already exists".
+                for _idx in ('idx_apartado_estado', 'idx_apartado_cliente_estado',
+                             'idx_apartado_fecha_limite'):
+                    try:
+                        db.session.execute(_sql_text(f"DROP INDEX IF EXISTS {_idx}"))
+                    except Exception:
+                        pass
+                db.session.commit()
+                Apartado.__table__.create(db.engine)
+                db.session.execute(_sql_text(
+                    f"INSERT INTO apartados ({lista}) SELECT {lista} FROM apartados_old_p"))
+                db.session.execute(_sql_text("DROP TABLE apartados_old_p"))
+                db.session.execute(_sql_text("PRAGMA foreign_keys=ON"))
+                db.session.commit()
+                print("✅ [SQLite] Tabla 'apartados' reconstruida (producto_id NULL).")
+        else:
+            col_prod = next((c for c in inspect(db.engine).get_columns('apartados')
+                             if c['name'] == 'producto_id'), None)
+            if col_prod is not None and not col_prod.get('nullable', True):
+                print("🔧 Permitiendo NULL en apartados.producto_id...")
+                _ejecutar("ALTER TABLE apartados ALTER COLUMN producto_id DROP NOT NULL")
+
+            fk_p = next((f for f in inspect(db.engine).get_foreign_keys('apartados')
+                         if f.get('referred_table') == 'productos'
+                         and 'producto_id' in (f.get('constrained_columns') or [])), None)
+            if fk_p and fk_p.get('name'):
+                regla = ((fk_p.get('options') or {}).get('ondelete') or '').upper()
+                if regla != 'SET NULL':
+                    nfk = fk_p['name']
+                    print(f"🔧 FK '{nfk}': {regla or 'NO ACTION'} -> SET NULL (protege apartados finalizados)")
+                    _ejecutar(f'ALTER TABLE apartados DROP CONSTRAINT "{nfk}"')
+                    _ejecutar(f'ALTER TABLE apartados ADD CONSTRAINT "{nfk}" '
+                              'FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE SET NULL')
+
+            fk_dv = next((f for f in inspect(db.engine).get_foreign_keys('detalle_ventas')
+                          if f.get('referred_table') == 'productos'
+                          and 'producto_id' in (f.get('constrained_columns') or [])), None)
+            if fk_dv and fk_dv.get('name'):
+                regla = ((fk_dv.get('options') or {}).get('ondelete') or '').upper()
+                if regla != 'SET NULL':
+                    nfk = fk_dv['name']
+                    print(f"🔧 FK detalle_ventas '{nfk}': {regla or 'NO ACTION'} -> SET NULL")
+                    _ejecutar(f'ALTER TABLE detalle_ventas DROP CONSTRAINT "{nfk}"')
+                    _ejecutar(f'ALTER TABLE detalle_ventas ADD CONSTRAINT "{nfk}" '
+                              'FOREIGN KEY (producto_id) REFERENCES productos(id) ON DELETE SET NULL')
 
         print("✅ Migración del módulo de apartados completada.")
 
@@ -873,6 +978,26 @@ def master_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+def _nombre_prod_venta():
+    """
+    Nombre del producto para los reportes de VENTAS.
+
+    Si el producto fue eliminado del inventario, cae al nombre respaldado en la
+    propia línea de venta. Así el dinero NUNCA desaparece de los reportes por
+    haber borrado un producto.
+    """
+    return func.coalesce(Producto.nombre,
+                         DetalleVenta.producto_nombre_hist,
+                         'Producto eliminado')
+
+
+def _nombre_prod_apartado():
+    """Igual que la anterior, pero para los reportes de APARTADOS/abonos."""
+    return func.coalesce(Producto.nombre,
+                         Apartado.producto_nombre_hist,
+                         'Producto eliminado')
+
+
 def obtener_usuario_actual():
     user_id = session.get('user_id')
     if user_id:
@@ -1116,7 +1241,10 @@ def ticket_nota_entrega(venta_id):
     configs_ticket = {}
     for clave in claves_ticket:
         cfg = Configuracion.query.filter_by(clave=clave).first()
-        configs_ticket[clave] = cfg.valor if cfg else None
+        # 🔥 Si la config no existe, NO se guarda la clave: así el .get(k, 'por_defecto')
+        # de abajo puede aplicar su valor por defecto en lugar de un None que rompe .lower()
+        if cfg is not None and cfg.valor is not None:
+            configs_ticket[clave] = cfg.valor
 
     config_ticket = {
         'nombre_tienda': configs_ticket.get('ticket_tienda_nombre', 'ELEMENTS STORE'),
@@ -2143,88 +2271,137 @@ def actualizar_producto(id):
     db.session.commit()
     return jsonify({'mensaje': 'Producto actualizado'})
 
+@api_bp.route('/productos/<int:id>/previsualizar-eliminacion', methods=['GET'])
+@login_required
+def previsualizar_eliminacion_producto(id):
+    """
+    Informa QUÉ va a pasar si se elimina este producto, antes de hacerlo.
+    Sirve para que la pantalla muestre un aviso claro y honesto.
+    """
+    producto = Producto.query.get_or_404(id)
+
+    ventas = DetalleVenta.query.filter_by(producto_id=id).count()
+    apartados_total = Apartado.query.filter_by(producto_id=id).count()
+    apartados_activos = Apartado.query.filter(
+        Apartado.producto_id == id,
+        Apartado.estado.in_(['activo', 'pendiente'])
+    ).count()
+    apartados_finalizados = Apartado.query.filter(
+        Apartado.producto_id == id,
+        Apartado.estado == 'pagado'
+    ).count()
+
+    return jsonify({
+        'producto': {'id': producto.id, 'nombre': producto.nombre, 'stock': producto.stock},
+        'puede_eliminar': apartados_activos == 0,
+        'bloqueos': ([] if apartados_activos == 0 else [{
+            'tipo': 'apartado_activo',
+            'cantidad': apartados_activos,
+            'mensaje': ('Hay %d apartado(s) en curso: un cliente todavía está pagando '
+                        'este producto.' % apartados_activos)
+        }]),
+        'se_conserva': {
+            'ventas': ventas,
+            'apartados_finalizados': apartados_finalizados,
+            'apartados_total': apartados_total
+        },
+        'advertencia': ('El producto desaparecerá del inventario. Los tickets y reportes '
+                        'ya emitidos seguirán mostrando su nombre.')
+    })
+
+
 @api_bp.route('/productos/<int:id>', methods=['DELETE'])
 @login_required
 def eliminar_producto(id):
     """
-    Elimina un producto del inventario.
+    Elimina un producto del inventario DE VERDAD.
 
-    CORREGIDO: antes hacía db.session.delete() sin comprobar nada. Si el producto
-    tenía ventas o apartados asociados, la base de datos rechazaba el borrado por
-    llave foránea y Flask devolvía una página HTML de error 500. El navegador
-    intentaba leer esa página como JSON y mostraba:
-        SyntaxError: Unexpected token '<', "<!doctype "... is not valid JSON
+    Mismo criterio que usamos con los clientes:
+      - Antes de borrar se guarda un SNAPSHOT del nombre en cada venta y apartado,
+        para que los tickets, el historial y Deudas Finalizadas sigan legibles.
+      - Solo se bloquea si hay un apartado EN CURSO (un cliente está pagando ese
+        producto ahora mismo); en ese caso borrarlo dejaría una deuda sin objeto.
+      - En cualquier otro caso el producto se elimina, tenga o no ventas pasadas.
 
-    Ahora se comprueba antes y SIEMPRE se responde en JSON.
+    Responde SIEMPRE en JSON (nunca una página HTML de error).
     """
     producto = Producto.query.get_or_404(id)
     nombre_producto = producto.nombre
     _u = obtener_usuario_actual()
 
     try:
-        # ¿Está en alguna venta ya registrada?
-        ventas_asociadas = DetalleVenta.query.filter_by(producto_id=id).count()
-
-        # ¿Está en algún apartado?
-        apartados_asociados = Apartado.query.filter_by(producto_id=id).count()
         apartados_activos = Apartado.query.filter(
             Apartado.producto_id == id,
             Apartado.estado.in_(['activo', 'pendiente'])
         ).count()
 
-        # 1) Apartado en curso -> NO se puede borrar (el cliente aún lo está pagando)
+        # ÚNICO bloqueo: un cliente está pagando este producto ahora mismo.
         if apartados_activos > 0:
             return jsonify({
-                'error': 'No se puede eliminar este producto',
-                'motivo': ('Tiene %d apartado(s) en curso. Un cliente todavía está '
-                           'pagando este producto.' % apartados_activos),
-                'sugerencia': 'Finaliza o reintegra esos apartados antes de eliminarlo.',
-                'ventas_asociadas': ventas_asociadas,
+                'error': 'No se puede eliminar todavía',
+                'motivo': ('"%s" tiene %d apartado(s) en curso: un cliente aún está '
+                           'pagándolo. Si se borra, esa deuda quedaría sin producto.'
+                           % (nombre_producto, apartados_activos)),
+                'sugerencia': ('Finaliza o reintegra ese apartado y después podrás '
+                               'eliminar el producto sin problema.'),
                 'apartados_activos': apartados_activos
             }), 409
 
-        # 2) Tiene historial (ventas o apartados pasados) -> se DESACTIVA, no se borra,
-        #    para no romper los tickets ni los reportes ya emitidos.
-        if ventas_asociadas > 0 or apartados_asociados > 0:
-            # El producto YA figura en tickets/reportes emitidos. Borrarlo dejaría
-            # esos documentos incompletos, así que se bloquea y se explica por qué.
-            partes = []
-            if ventas_asociadas > 0:
-                partes.append('%d venta(s)' % ventas_asociadas)
-            if apartados_asociados > 0:
-                partes.append('%d apartado(s)' % apartados_asociados)
-            return jsonify({
-                'error': 'No se puede eliminar este producto',
-                'motivo': ('"%s" ya aparece en %s registrados. Si se borra, esos '
-                           'tickets y reportes quedarían incompletos.'
-                           % (nombre_producto, ' y '.join(partes))),
-                'sugerencia': ('Pon su stock en 0 para que deje de venderse. '
-                               'Así el historial se conserva intacto.'),
-                'ventas_asociadas': ventas_asociadas,
-                'apartados_asociados': apartados_asociados
-            }), 409
+        # --- SNAPSHOT antes de borrar (para no perder el historial) ---
+        detalles = DetalleVenta.query.filter_by(producto_id=id).all()
+        for d in detalles:
+            if not d.producto_nombre_hist:
+                d.producto_nombre_hist = nombre_producto
 
-        # 3) Sin historial -> borrado real
+        apartados = Apartado.query.filter_by(producto_id=id).all()
+        for a in apartados:
+            if not a.producto_nombre_hist:
+                a.producto_nombre_hist = nombre_producto
+
+        ventas_afectadas = len(detalles)
+        apartados_afectados = len(apartados)
+
+        # Desvincular: el historial conserva el nombre, pero ya no apunta al producto.
+        for d in detalles:
+            d.producto_id = None
+        for a in apartados:
+            a.producto_id = None
+
+        db.session.flush()
+
+        # --- Borrado real ---
         db.session.delete(producto)
+
         db.session.add(Log(
             accion='ELIMINAR_PRODUCTO',
-            detalle='Producto "%s" (ID %d) eliminado del inventario.' % (nombre_producto, id),
+            detalle=('Producto "%s" (ID %d) eliminado del inventario. '
+                     'Historial conservado: %d venta(s) y %d apartado(s).'
+                     % (nombre_producto, id, ventas_afectadas, apartados_afectados)),
             usuario=(_u.username if _u else 'sistema')
         ))
         db.session.commit()
+
+        if ventas_afectadas or apartados_afectados:
+            detalle_msg = ('"%s" se eliminó del inventario. Sus %d venta(s) y %d '
+                           'apartado(s) siguen en el historial con el nombre del producto.'
+                           % (nombre_producto, ventas_afectadas, apartados_afectados))
+        else:
+            detalle_msg = '"%s" se eliminó del inventario.' % nombre_producto
+
         return jsonify({
             'mensaje': 'Producto eliminado',
-            'detalle': '"%s" se eliminó del inventario.' % nombre_producto,
-            'desactivado': False
+            'detalle': detalle_msg,
+            'ventas_conservadas': ventas_afectadas,
+            'apartados_conservados': apartados_afectados
         }), 200
 
     except Exception as e:
         db.session.rollback()
-        # Nunca devolver HTML a una llamada de API: el frontend espera JSON.
         return jsonify({
             'error': 'No se pudo eliminar el producto',
             'motivo': str(e)
         }), 500
+
 
 # ============================================================
 # API: CLIENTES (PROTEGIDA) - MODIFICADO PARA FILTRAR ACTIVOS E INACTIVOS
@@ -2895,7 +3072,8 @@ def registrar_venta():
             precio_unitario_usd=precio_unitario_usd_ajustado,
             precio_unitario_ves=precio_ves_unitario,
             descuento_porcentaje=descuento,
-            precio_original_usd=precio_base
+            precio_original_usd=precio_base,
+            producto_nombre_hist=producto.nombre  # 🔥 respaldo para el historial
         )
         db.session.add(detalle)
 
@@ -2926,7 +3104,10 @@ def registrar_venta():
         configs_ticket = {}
         for clave in claves_ticket:
             cfg = Configuracion.query.filter_by(clave=clave).first()
-            configs_ticket[clave] = cfg.valor if cfg else None
+            # 🔥 Si la config no existe, NO se guarda la clave: así el .get(k, 'por_defecto')
+        # de abajo puede aplicar su valor por defecto en lugar de un None que rompe .lower()
+        if cfg is not None and cfg.valor is not None:
+            configs_ticket[clave] = cfg.valor
 
         config_ticket = {
             'nombre_tienda': configs_ticket.get('ticket_tienda_nombre', 'ELEMENTS STORE'),
@@ -3025,7 +3206,8 @@ def registrar_venta():
     _cfg = {}
     for _clave in _claves_ticket:
         _c = Configuracion.query.filter_by(clave=_clave).first()
-        _cfg[_clave] = _c.valor if _c else None
+        if _c is not None and _c.valor is not None:
+            _cfg[_clave] = _c.valor
 
     config_ticket_usb = {
         'nombre_tienda': _cfg.get('ticket_tienda_nombre') or 'ELEMENTS STORE',
@@ -4036,17 +4218,18 @@ def resumen_reportes():
 
     # Top productos en USD (ventas normales con moneda_cobro='USD' y no anuladas)
     top_productos_usd_query = db.session.query(
-        Producto.nombre,
+        _nombre_prod_venta().label('nombre'),
         func.sum(DetalleVenta.cantidad).label('vendido'),
         func.sum(DetalleVenta.precio_unitario_usd * DetalleVenta.cantidad).label('total')
-    ).join(DetalleVenta, DetalleVenta.producto_id == Producto.id)\
+    ).select_from(DetalleVenta)\
+     .outerjoin(Producto, Producto.id == DetalleVenta.producto_id)\
      .join(Venta, Venta.id == DetalleVenta.venta_id)\
      .filter(Venta.es_apartado == False)\
      .filter(Venta.anulado == False)\
      .filter(Venta.moneda_cobro == 'USD')\
      .filter(Venta.fecha >= (desde if fecha_desde else datetime(2000,1,1)))\
      .filter(Venta.fecha < (hasta if fecha_hasta else datetime(2100,1,1)))\
-     .group_by(Producto.id)\
+     .group_by(_nombre_prod_venta(), DetalleVenta.producto_id)\
      .order_by(func.sum(DetalleVenta.precio_unitario_usd * DetalleVenta.cantidad).desc())\
      .limit(5)
 
@@ -4060,17 +4243,18 @@ def resumen_reportes():
 
     # Top productos en VES (ventas normales con moneda_cobro='VES' y no anuladas)
     top_productos_ves_query = db.session.query(
-        Producto.nombre,
+        _nombre_prod_venta().label('nombre'),
         func.sum(DetalleVenta.cantidad).label('vendido'),
         func.sum(DetalleVenta.precio_unitario_ves * DetalleVenta.cantidad).label('total')
-    ).join(DetalleVenta, DetalleVenta.producto_id == Producto.id)\
+    ).select_from(DetalleVenta)\
+     .outerjoin(Producto, Producto.id == DetalleVenta.producto_id)\
      .join(Venta, Venta.id == DetalleVenta.venta_id)\
      .filter(Venta.es_apartado == False)\
      .filter(Venta.anulado == False)\
      .filter(Venta.moneda_cobro == 'VES')\
      .filter(Venta.fecha >= (desde if fecha_desde else datetime(2000,1,1)))\
      .filter(Venta.fecha < (hasta if fecha_hasta else datetime(2100,1,1)))\
-     .group_by(Producto.id)\
+     .group_by(_nombre_prod_venta(), DetalleVenta.producto_id)\
      .order_by(func.sum(DetalleVenta.precio_unitario_ves * DetalleVenta.cantidad).desc())\
      .limit(5)
 
@@ -4639,6 +4823,7 @@ def crear_apartado():
         # 🔥 NUEVO: respaldo de los datos del cliente al momento del apartado.
         # Si el cliente se elimina luego, el histórico sigue siendo legible.
         cliente_nombre_hist=f"{cliente.nombre} {cliente.apellido}".strip(),
+        producto_nombre_hist=producto.nombre,  # 🔥 respaldo para el historial
         cliente_cedula_hist=cliente.cedula,
         cliente_telefono_hist=cliente.telefono,
         producto_id=producto_id,
@@ -4787,12 +4972,14 @@ def detalle_apartado(id):
             'nombre_completo': apartado.cliente_nombre_completo
         },
         'producto': {
-            'id': producto.id,
-            'nombre': producto.nombre,
-            'categoria': producto.categoria.nombre if producto.categoria else None,
-            'marca': producto.marca.nombre if producto.marca else None,
-            'talla': producto.talla_ref.nombre if producto.talla_ref else None,
-            'precio_usd': producto.precio_usd
+            # 🔥 Tolerante a producto eliminado: cae al respaldo histórico
+            'id': producto.id if producto else None,
+            'nombre': apartado.producto_nombre_seguro,
+            'categoria': (producto.categoria.nombre if producto and producto.categoria else None),
+            'marca': (producto.marca.nombre if producto and producto.marca else None),
+            'talla': (producto.talla_ref.nombre if producto and producto.talla_ref else None),
+            'precio_usd': (producto.precio_usd if producto else apartado.precio_unitario_usd),
+            'eliminado': apartado.producto_eliminado
         },
         'cantidad': apartado.cantidad,
         'precio_unitario_usd': apartado.precio_unitario_usd,
@@ -5013,7 +5200,8 @@ def finalizar_apartado(id):
         precio_unitario_usd=precio_unitario_usd,
         precio_unitario_ves=precio_unitario_ves,
         descuento_porcentaje=0,
-        precio_original_usd=precio_final_usd
+        precio_original_usd=precio_final_usd,
+        producto_nombre_hist=producto.nombre  # 🔥 respaldo para el historial
     )
     db.session.add(detalle)
     
@@ -5050,7 +5238,10 @@ def finalizar_apartado(id):
         configs_ticket = {}
         for clave in claves_ticket:
             cfg = Configuracion.query.filter_by(clave=clave).first()
-            configs_ticket[clave] = cfg.valor if cfg else None
+            # 🔥 Si la config no existe, NO se guarda la clave: así el .get(k, 'por_defecto')
+        # de abajo puede aplicar su valor por defecto en lugar de un None que rompe .lower()
+        if cfg is not None and cfg.valor is not None:
+            configs_ticket[clave] = cfg.valor
 
         config_ticket = {
             'nombre_tienda': configs_ticket.get('ticket_tienda_nombre', 'ELEMENTS STORE'),
@@ -5179,7 +5370,7 @@ def reintegrar_apartado(id):
     
     # Log
     log = Log(accion='APARTADO_REINTEGRADO',
-              detalle=f'Apartado #{apartado.id} reintegrado - Producto: {apartado.producto.nombre} - '
+              detalle=f'Apartado #{apartado.id} reintegrado - Producto: {apartado.producto_nombre_seguro} - '
                       f'{pagos_anulados} abono(s) anulados por ${total_anulado_usd:.2f} '
                       f'(Bs {total_anulado_ves:,.2f}) - Stock devuelto: {apartado.cantidad}')
     db.session.add(log)
@@ -5262,16 +5453,16 @@ def reportes_abonos():
     # ============================================================
     # Top productos apartados en USD
     top_apartados_usd_query = db.session.query(
-        Producto.nombre,
+        _nombre_prod_apartado().label('nombre'),
         func.sum(PagoApartado.monto_usd).label('total'),
         func.count(Apartado.id.distinct()).label('vendido')  # número de apartados distintos por producto
     ).join(Apartado, Apartado.id == PagoApartado.apartado_id)\
      .filter(or_(PagoApartado.anulado == False, PagoApartado.anulado.is_(None)))\
-     .join(Producto, Producto.id == Apartado.producto_id)\
+     .outerjoin(Producto, Producto.id == Apartado.producto_id)\
      .filter(PagoApartado.fecha_abono >= (desde if fecha_desde else datetime(2000,1,1)))\
      .filter(PagoApartado.fecha_abono < (hasta if fecha_hasta else datetime(2100,1,1)))\
      .filter(PagoApartado.metodo_cobro.in_(['usd', 'usd_personalizado']))\
-     .group_by(Producto.id)\
+     .group_by(_nombre_prod_apartado(), Apartado.producto_id)\
      .order_by(func.sum(PagoApartado.monto_usd).desc())\
      .limit(5).all()
 
@@ -5285,12 +5476,12 @@ def reportes_abonos():
 
     # Top productos apartados en VES
     top_apartados_ves_query = db.session.query(
-        Producto.nombre,
+        _nombre_prod_apartado().label('nombre'),
         func.sum(PagoApartado.monto_ves).label('total'),
         func.count(Apartado.id.distinct()).label('vendido')
     ).join(Apartado, Apartado.id == PagoApartado.apartado_id)\
      .filter(or_(PagoApartado.anulado == False, PagoApartado.anulado.is_(None)))\
-     .join(Producto, Producto.id == Apartado.producto_id)\
+     .outerjoin(Producto, Producto.id == Apartado.producto_id)\
      .filter(PagoApartado.fecha_abono >= (desde if fecha_desde else datetime(2000,1,1)))\
      .filter(PagoApartado.fecha_abono < (hasta if fecha_hasta else datetime(2100,1,1)))\
      .filter(
@@ -5299,7 +5490,7 @@ def reportes_abonos():
              PagoApartado.metodo_cobro == None
          )
      )\
-     .group_by(Producto.id)\
+     .group_by(_nombre_prod_apartado(), Apartado.producto_id)\
      .order_by(func.sum(PagoApartado.monto_ves).desc())\
      .limit(5).all()
 
@@ -5394,7 +5585,7 @@ def reportes_abonos():
         clientes_list.append({
             'cliente': f"{cliente.nombre} {cliente.apellido}",
             'cedula': cliente.cedula,
-            'producto': a.producto.nombre,
+            'producto': a.producto_nombre_seguro,
             'cantidad': a.cantidad,
             'total_usd': round(a.total_usd, 2),
             'total_ves': round(a.cantidad * a.precio_unitario_ves, 2),
@@ -5638,17 +5829,18 @@ def reportes_globales():
     
     # Ventas USD (no anuladas)
     ventas_usd_detalle = db.session.query(
-        Producto.nombre,
+        _nombre_prod_venta().label('nombre'),
         func.sum(DetalleVenta.cantidad).label('cantidad'),
         func.sum(DetalleVenta.precio_unitario_usd * DetalleVenta.cantidad).label('total')
-    ).join(DetalleVenta, DetalleVenta.producto_id == Producto.id)\
+    ).select_from(DetalleVenta)\
+     .outerjoin(Producto, Producto.id == DetalleVenta.producto_id)\
      .join(Venta, Venta.id == DetalleVenta.venta_id)\
      .filter(Venta.es_apartado == False)\
      .filter(Venta.anulado == False)\
      .filter(Venta.moneda_cobro == 'USD')\
      .filter(Venta.fecha >= (desde if fecha_desde else datetime(2000,1,1)))\
      .filter(Venta.fecha < (hasta if fecha_hasta else datetime(2100,1,1)))\
-     .group_by(Producto.id)\
+     .group_by(_nombre_prod_venta(), DetalleVenta.producto_id)\
      .order_by(func.sum(DetalleVenta.precio_unitario_usd * DetalleVenta.cantidad).desc()).all()
     
     for row in ventas_usd_detalle:
@@ -5657,16 +5849,16 @@ def reportes_globales():
     
     # Abonos USD
     abonos_usd_detalle = db.session.query(
-        Producto.nombre,
+        _nombre_prod_apartado().label('nombre'),
         func.count(Apartado.id.distinct()).label('cantidad'),
         func.sum(PagoApartado.monto_usd).label('total')
     ).join(Apartado, Apartado.id == PagoApartado.apartado_id)\
      .filter(or_(PagoApartado.anulado == False, PagoApartado.anulado.is_(None)))\
-     .join(Producto, Producto.id == Apartado.producto_id)\
+     .outerjoin(Producto, Producto.id == Apartado.producto_id)\
      .filter(PagoApartado.fecha_abono >= (desde if fecha_desde else datetime(2000,1,1)))\
      .filter(PagoApartado.fecha_abono < (hasta if fecha_hasta else datetime(2100,1,1)))\
      .filter(PagoApartado.metodo_cobro.in_(['usd', 'usd_personalizado']))\
-     .group_by(Producto.id).all()
+     .group_by(_nombre_prod_apartado(), Apartado.producto_id).all()
     
     for row in abonos_usd_detalle:
         global_usd_totals[row.nombre] += row.total
@@ -5674,17 +5866,18 @@ def reportes_globales():
     
     # Ventas VES (no anuladas)
     ventas_ves_detalle = db.session.query(
-        Producto.nombre,
+        _nombre_prod_venta().label('nombre'),
         func.sum(DetalleVenta.cantidad).label('cantidad'),
         func.sum(DetalleVenta.precio_unitario_ves * DetalleVenta.cantidad).label('total')
-    ).join(DetalleVenta, DetalleVenta.producto_id == Producto.id)\
+    ).select_from(DetalleVenta)\
+     .outerjoin(Producto, Producto.id == DetalleVenta.producto_id)\
      .join(Venta, Venta.id == DetalleVenta.venta_id)\
      .filter(Venta.es_apartado == False)\
      .filter(Venta.anulado == False)\
      .filter(Venta.moneda_cobro == 'VES')\
      .filter(Venta.fecha >= (desde if fecha_desde else datetime(2000,1,1)))\
      .filter(Venta.fecha < (hasta if fecha_hasta else datetime(2100,1,1)))\
-     .group_by(Producto.id).all()
+     .group_by(_nombre_prod_venta(), DetalleVenta.producto_id).all()
     
     for row in ventas_ves_detalle:
         global_ves_totals[row.nombre] += row.total
@@ -5692,12 +5885,12 @@ def reportes_globales():
     
     # Abonos VES
     abonos_ves_detalle = db.session.query(
-        Producto.nombre,
+        _nombre_prod_apartado().label('nombre'),
         func.count(Apartado.id.distinct()).label('cantidad'),
         func.sum(PagoApartado.monto_ves).label('total')
     ).join(Apartado, Apartado.id == PagoApartado.apartado_id)\
      .filter(or_(PagoApartado.anulado == False, PagoApartado.anulado.is_(None)))\
-     .join(Producto, Producto.id == Apartado.producto_id)\
+     .outerjoin(Producto, Producto.id == Apartado.producto_id)\
      .filter(PagoApartado.fecha_abono >= (desde if fecha_desde else datetime(2000,1,1)))\
      .filter(PagoApartado.fecha_abono < (hasta if fecha_hasta else datetime(2100,1,1)))\
      .filter(
@@ -5706,7 +5899,7 @@ def reportes_globales():
              PagoApartado.metodo_cobro == None
          )
      )\
-     .group_by(Producto.id).all()
+     .group_by(_nombre_prod_apartado(), Apartado.producto_id).all()
     
     for row in abonos_ves_detalle:
         global_ves_totals[row.nombre] += row.total
@@ -5831,7 +6024,7 @@ def detalle_ventas():
         hasta = datetime.strptime(fecha_hasta, '%Y-%m-%d') + timedelta(days=1)
     
     query = db.session.query(
-        Producto.nombre.label('producto'),
+        _nombre_prod_venta().label('producto'),
         Cliente.nombre.label('cliente_nombre'),
         Cliente.apellido.label('cliente_apellido'),
         DetalleVenta.cantidad,
@@ -5839,7 +6032,7 @@ def detalle_ventas():
         DetalleVenta.precio_unitario_ves,
         Venta.moneda_cobro
     ).join(Venta, Venta.id == DetalleVenta.venta_id)\
-     .join(Producto, Producto.id == DetalleVenta.producto_id)\
+     .outerjoin(Producto, Producto.id == DetalleVenta.producto_id)\
      .outerjoin(Cliente, Cliente.id == Venta.cliente_id)\
      .filter(Venta.es_apartado == False)\
      .filter(Venta.anulado == False)  # 🔥 Excluir anuladas
