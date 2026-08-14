@@ -814,6 +814,34 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+def master_required_api(f):
+    """
+    🔥 NUEVO: igual que master_required, pero para endpoints de API.
+    En vez de redirigir a una página (lo que rompería un fetch), devuelve
+    un JSON con el código de error correspondiente.
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            return jsonify({'error': 'Debes iniciar sesión para realizar esta acción.'}), 401
+        try:
+            asegurar_tabla_usuarios()
+            usuario = Usuario.query.get(session['user_id'])
+            if not usuario:
+                session.clear()
+                return jsonify({'error': 'Usuario no encontrado. Inicia sesión nuevamente.'}), 401
+            session['rol'] = usuario.rol
+            if usuario.rol != 'Master':
+                return jsonify({
+                    'error': 'Acción restringida. Solo un usuario Master puede eliminar el historial.'
+                }), 403
+        except Exception as e:
+            print(f"❌ Error en master_required_api: {e}")
+            return jsonify({'error': 'Error al verificar permisos.'}), 500
+        return f(*args, **kwargs)
+    return decorated_function
+
+
 def master_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -2373,21 +2401,108 @@ def previsualizar_eliminacion_cliente(id):
     }), 200
 
 
+@api_bp.route('/logs/estadisticas', methods=['GET'])
+@login_required
+def logs_estadisticas():
+    """
+    🔥 NUEVO: resumen del historial, para mostrarlo antes de borrar.
+    Indica cuántos registros hay y cuántos caerían con cada opción.
+    """
+    try:
+        total = Log.query.count()
+
+        ahora = now_venezuela()
+        conteos = {}
+        for dias in (7, 30, 90, 180, 365):
+            limite = ahora - timedelta(days=dias)
+            conteos[str(dias)] = Log.query.filter(Log.fecha < limite).count()
+
+        primero = Log.query.order_by(Log.fecha.asc()).first()
+        ultimo = Log.query.order_by(Log.fecha.desc()).first()
+
+        # Peso aproximado: ~150 bytes por registro en PostgreSQL (fila + índices)
+        peso_kb = round((total * 150) / 1024, 1)
+
+        return jsonify({
+            'total': total,
+            'antiguos_por_dias': conteos,
+            'mas_antiguo': primero.fecha.strftime('%d/%m/%Y %H:%M') if primero else None,
+            'mas_reciente': ultimo.fecha.strftime('%d/%m/%Y %H:%M') if ultimo else None,
+            'peso_estimado_kb': peso_kb,
+            'retencion_automatica_dias': DIAS_RETENCION_LOGS
+        }), 200
+    except Exception as e:
+        print(f"❌ Error en logs_estadisticas: {e}")
+        return jsonify({'error': f'Error al obtener estadísticas: {str(e)}'}), 500
+
+
 @api_bp.route('/mantenimiento/purgar-logs', methods=['POST'])
 @login_required
 def purgar_logs_manual():
-    """🔥 NUEVO: limpieza manual de logs desde la interfaz."""
+    """
+    🔥 Limpieza manual de logs por antigüedad.
+    Body: {"dias": 30}  -> borra los registros con más de 30 días.
+    """
     try:
         dias = int((request.get_json(silent=True) or {}).get('dias', DIAS_RETENCION_LOGS))
     except (TypeError, ValueError):
         dias = DIAS_RETENCION_LOGS
-    dias = max(7, min(dias, 3650))
+    dias = max(1, min(dias, 3650))
     borrados = purgar_logs_antiguos(dias=dias, forzado=True)
     return jsonify({
         'mensaje': f'{borrados} registro(s) de log eliminados (anteriores a {dias} días).',
         'eliminados': borrados,
+        'restantes': Log.query.count(),
         'dias_retencion': dias
     }), 200
+
+
+@api_bp.route('/logs/eliminar-todo', methods=['DELETE'])
+@login_required
+@master_required_api
+def eliminar_todos_los_logs():
+    """
+    🔥 NUEVO: BORRADO TOTAL del historial de actividad.
+
+    Requiere rol Master y confirmación explícita en el cuerpo:
+        {"confirmacion": "ELIMINAR"}
+
+    El historial de actividad es solo un registro de auditoría: borrarlo
+    NO afecta ventas, apartados, clientes, inventario ni finanzas.
+    """
+    datos = request.get_json(silent=True) or {}
+    if (datos.get('confirmacion') or '').strip().upper() != 'ELIMINAR':
+        return jsonify({
+            'error': 'Confirmación requerida. Debes escribir ELIMINAR para continuar.'
+        }), 400
+
+    try:
+        total = Log.query.count()
+        Log.query.delete(synchronize_session=False)
+        db.session.commit()
+
+        # Se deja constancia del propio borrado (primer registro del nuevo historial)
+        usuario = session.get('username', 'desconocido')
+        db.session.add(Log(
+            accion='LOGS_ELIMINADOS',
+            detalle=f'Historial de actividad borrado manualmente por {usuario}. '
+                    f'{total} registro(s) eliminados.',
+            usuario=usuario
+        ))
+        db.session.commit()
+
+        return jsonify({
+            'mensaje': f'Historial eliminado: {total} registro(s) borrados.',
+            'eliminados': total,
+            'restantes': Log.query.count()
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Error al eliminar los logs: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Error al eliminar el historial: {str(e)}'}), 500
 
 
 # ============================================================
