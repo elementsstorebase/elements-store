@@ -2295,7 +2295,9 @@ def registrar_venta():
     elif metodo_cobro == 'personalizada':
         tasa_aplicada = tasa_personalizada
         moneda_cobro = 'VES'
-        subtotal_ves = round(subtotal_usd * tasa_usd, 2)            # Se recalculará abajo con precios ajustados
+        total_cobro = round(subtotal_usd * tasa_personalizada, 2)   # Monto en VES que el cliente paga
+        subtotal_ves = round(subtotal_usd * tasa_usd, 2)
+        # 🔥 CORRECCIÓN CRÍTICA: factor de ajuste para precios unitarios
         factor_ajuste = tasa_personalizada / tasa_usd if tasa_usd > 0 else 1.0
     elif metodo_cobro == 'bs_personalizado':
         # 🔥 CORRECCIÓN: total_cobro es el monto en Bs ingresado por el usuario (ej: 68000)

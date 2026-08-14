@@ -738,11 +738,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 tasaAplicada = tasaEur;
                 break;
             case 'personalizada':
-                // ✅ CORRECCIÓN: Subtotal VES con tasa BCV, TOTAL con tasa personalizada
+                // ✅ CORRECCIÓN: Subtotal VES con tasa BCV, TOTAL = Subtotal VES (más IVA si aplica)
                 subtotalVes = subtotalUsd * tasaUsd;
-                totalMostrar = subtotalUsd * tasaPersonalizada;
+                totalMostrar = subtotalVes;               // ¡Ahora el TOTAL es el equivalente BCV!
                 simbolo = 'Bs ';
-                tasaAplicada = tasaPersonalizada;
+                tasaAplicada = tasaUsd;                   // Mostrar la tasa BCV, no la personalizada
                 break;
             case 'bs_personalizado':
                 // ✅ CORRECTO: El total en Bs = subtotalUsd * tasaUsd (con descuentos aplicados)
