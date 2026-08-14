@@ -87,6 +87,61 @@ app.register_blueprint(main_bp)
 app.register_blueprint(api_bp, url_prefix='/api')
 
 # ============================================
+# 🔥 RED DE SEGURIDAD: LAS RUTAS /api/ SIEMPRE RESPONDEN JSON
+# ============================================
+# Antes, si una ruta de /api/ fallaba, Flask devolvía una página HTML de error.
+# El navegador intentaba leerla como JSON y mostraba este mensaje confuso:
+#     SyntaxError: Unexpected token '<', "<!doctype "... is not valid JSON
+# Ahora cualquier error bajo /api/ se responde en JSON, así el frontend puede
+# mostrar un mensaje entendible en lugar de romperse.
+
+def _es_peticion_api():
+    return request.path.startswith('/api/')
+
+
+@app.errorhandler(500)
+def _error_500(e):
+    if _es_peticion_api():
+        db.session.rollback()
+        original = getattr(e, 'original_exception', None)
+        app.logger.error('Error 500 en %s: %s', request.path, original or e)
+        return jsonify({
+            'error': 'Error interno del servidor',
+            'motivo': str(original or e),
+            'ruta': request.path
+        }), 500
+    return e
+
+
+@app.errorhandler(404)
+def _error_404(e):
+    if _es_peticion_api():
+        return jsonify({
+            'error': 'Recurso no encontrado',
+            'motivo': 'La dirección %s no existe en el servidor.' % request.path,
+            'ruta': request.path
+        }), 404
+    return e
+
+
+@app.errorhandler(Exception)
+def _error_no_controlado(e):
+    # Deja pasar los errores HTTP normales (401, 403, 404, 409...)
+    from werkzeug.exceptions import HTTPException
+    if isinstance(e, HTTPException):
+        return e
+    if _es_peticion_api():
+        db.session.rollback()
+        app.logger.exception('Excepción no controlada en %s', request.path)
+        return jsonify({
+            'error': 'Error inesperado',
+            'motivo': str(e),
+            'ruta': request.path
+        }), 500
+    raise e
+
+
+# ============================================
 # FUNCIONES DE MIGRACIÓN (CORREGIDAS Y COMPLETAS)
 # ============================================
 

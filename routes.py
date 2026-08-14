@@ -2146,10 +2146,85 @@ def actualizar_producto(id):
 @api_bp.route('/productos/<int:id>', methods=['DELETE'])
 @login_required
 def eliminar_producto(id):
+    """
+    Elimina un producto del inventario.
+
+    CORREGIDO: antes hacía db.session.delete() sin comprobar nada. Si el producto
+    tenía ventas o apartados asociados, la base de datos rechazaba el borrado por
+    llave foránea y Flask devolvía una página HTML de error 500. El navegador
+    intentaba leer esa página como JSON y mostraba:
+        SyntaxError: Unexpected token '<', "<!doctype "... is not valid JSON
+
+    Ahora se comprueba antes y SIEMPRE se responde en JSON.
+    """
     producto = Producto.query.get_or_404(id)
-    db.session.delete(producto)
-    db.session.commit()
-    return jsonify({'mensaje': 'Producto eliminado'})
+    nombre_producto = producto.nombre
+    _u = obtener_usuario_actual()
+
+    try:
+        # ¿Está en alguna venta ya registrada?
+        ventas_asociadas = DetalleVenta.query.filter_by(producto_id=id).count()
+
+        # ¿Está en algún apartado?
+        apartados_asociados = Apartado.query.filter_by(producto_id=id).count()
+        apartados_activos = Apartado.query.filter(
+            Apartado.producto_id == id,
+            Apartado.estado.in_(['activo', 'pendiente'])
+        ).count()
+
+        # 1) Apartado en curso -> NO se puede borrar (el cliente aún lo está pagando)
+        if apartados_activos > 0:
+            return jsonify({
+                'error': 'No se puede eliminar este producto',
+                'motivo': ('Tiene %d apartado(s) en curso. Un cliente todavía está '
+                           'pagando este producto.' % apartados_activos),
+                'sugerencia': 'Finaliza o reintegra esos apartados antes de eliminarlo.',
+                'ventas_asociadas': ventas_asociadas,
+                'apartados_activos': apartados_activos
+            }), 409
+
+        # 2) Tiene historial (ventas o apartados pasados) -> se DESACTIVA, no se borra,
+        #    para no romper los tickets ni los reportes ya emitidos.
+        if ventas_asociadas > 0 or apartados_asociados > 0:
+            # El producto YA figura en tickets/reportes emitidos. Borrarlo dejaría
+            # esos documentos incompletos, así que se bloquea y se explica por qué.
+            partes = []
+            if ventas_asociadas > 0:
+                partes.append('%d venta(s)' % ventas_asociadas)
+            if apartados_asociados > 0:
+                partes.append('%d apartado(s)' % apartados_asociados)
+            return jsonify({
+                'error': 'No se puede eliminar este producto',
+                'motivo': ('"%s" ya aparece en %s registrados. Si se borra, esos '
+                           'tickets y reportes quedarían incompletos.'
+                           % (nombre_producto, ' y '.join(partes))),
+                'sugerencia': ('Pon su stock en 0 para que deje de venderse. '
+                               'Así el historial se conserva intacto.'),
+                'ventas_asociadas': ventas_asociadas,
+                'apartados_asociados': apartados_asociados
+            }), 409
+
+        # 3) Sin historial -> borrado real
+        db.session.delete(producto)
+        db.session.add(Log(
+            accion='ELIMINAR_PRODUCTO',
+            detalle='Producto "%s" (ID %d) eliminado del inventario.' % (nombre_producto, id),
+            usuario=(_u.username if _u else 'sistema')
+        ))
+        db.session.commit()
+        return jsonify({
+            'mensaje': 'Producto eliminado',
+            'detalle': '"%s" se eliminó del inventario.' % nombre_producto,
+            'desactivado': False
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        # Nunca devolver HTML a una llamada de API: el frontend espera JSON.
+        return jsonify({
+            'error': 'No se pudo eliminar el producto',
+            'motivo': str(e)
+        }), 500
 
 # ============================================================
 # API: CLIENTES (PROTEGIDA) - MODIFICADO PARA FILTRAR ACTIVOS E INACTIVOS

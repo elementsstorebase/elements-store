@@ -306,13 +306,36 @@ document.addEventListener('DOMContentLoaded', function() {
     // ---------- ELIMINAR PRODUCTO ----------
     window.eliminarProducto = function(id) {
         if (!confirm('¿Estás seguro de eliminar este producto? Esta acción no se puede deshacer.')) return;
-        fetch(`/api/productos/${id}`, { method: 'DELETE' })
-            .then(r => r.json())
-            .then(res => {
-                alert(res.mensaje || 'Producto eliminado');
+        fetch(`/api/productos/${id}`, { method: 'DELETE', credentials: 'same-origin' })
+            .then(function (r) {
+                // 🔥 CORREGIDO: si el servidor devuelve una página de error (HTML),
+                // r.json() lanzaba: Unexpected token '<', "<!doctype "...
+                // Ahora se comprueba el tipo de contenido antes de interpretarlo.
+                const tipo = r.headers.get('Content-Type') || '';
+                if (tipo.indexOf('application/json') === -1) {
+                    if (r.status === 401 || r.status === 403) {
+                        throw new Error('Tu sesión expiró. Vuelve a iniciar sesión.');
+                    }
+                    throw new Error('El servidor respondió con un error ' + r.status +
+                                    '. Vuelve a intentarlo; si persiste, avisa al técnico.');
+                }
+                return r.json().then(function (cuerpo) {
+                    return { ok: r.ok, status: r.status, cuerpo: cuerpo };
+                });
+            })
+            .then(function (res) {
+                if (!res.ok) {
+                    // 409 = el producto tiene ventas o apartados: no se puede borrar.
+                    let msg = res.cuerpo.error || 'No se pudo eliminar el producto';
+                    if (res.cuerpo.motivo) msg += '\n\n' + res.cuerpo.motivo;
+                    if (res.cuerpo.sugerencia) msg += '\n\n💡 ' + res.cuerpo.sugerencia;
+                    alert(msg);
+                    return;
+                }
+                alert(res.cuerpo.detalle || res.cuerpo.mensaje || 'Producto eliminado');
                 cargarProductos();
             })
-            .catch(err => alert('Error: ' + err));
+            .catch(function (err) { alert('Error: ' + err.message); });
     };
 
     // ---------- HISTORIAL DE TASAS ----------
