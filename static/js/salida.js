@@ -964,6 +964,51 @@ document.addEventListener('DOMContentLoaded', function() {
     // ============================================================
     // 🔥 FUNCIÓN MEJORADA PARA ABRIR EL TICKET HTML (window.print)
     // ============================================================
+    // ============================================================
+    // 🔥 NUEVO: DESCARGA REAL DE LA IMAGEN PNG DEL TICKET
+    // Pide /api/generar-ticket/<id>, recibe la imagen y la guarda
+    // como archivo. No abre ventanas ni diálogos de impresión.
+    // ============================================================
+    function descargarTicketPng(ventaId, numTicket) {
+        if (!ventaId) return Promise.reject(new Error('Falta el número de venta'));
+        return fetch(`/api/generar-ticket/${ventaId}`, { credentials: 'same-origin' })
+            .then(function (resp) {
+                if (resp.status === 401 || resp.status === 403) {
+                    throw new Error('Tu sesión expiró. Vuelve a iniciar sesión.');
+                }
+                if (resp.status === 404) {
+                    throw new Error('El servidor no encontró la venta.');
+                }
+                if (!resp.ok) {
+                    throw new Error('El servidor respondió ' + resp.status);
+                }
+                const tipo = resp.headers.get('Content-Type') || '';
+                if (tipo.indexOf('image') === -1) {
+                    throw new Error('El servidor no devolvió una imagen.');
+                }
+                return resp.blob();
+            })
+            .then(function (blob) {
+                if (!blob || blob.size === 0) {
+                    throw new Error('La imagen llegó vacía.');
+                }
+                const nombre = 'ticket_' + (numTicket || ventaId) + '.png';
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = nombre;
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                // Liberar memoria y limpiar el enlace temporal
+                setTimeout(function () {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }, 1000);
+                return nombre;
+            });
+    }
+
     function imprimirNotaEntrega(ventaId) {
         if (!ventaId) {
             console.warn('No se proporcionó ventaId para imprimir nota de entrega');
@@ -1196,15 +1241,23 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (res.numero_ticket) {
                     numeroTicket = String(res.numero_ticket).padStart(5, '0');
                 }
-                btnGenerarTicket.textContent = 'Descargando ticket...';
-                window.location.href = `/api/generar-ticket/${ventaId}`;
-                imprimirNotaEntrega(ventaId);
-                setTimeout(() => {
-                    limpiarVenta();
-                    btnGenerarTicket.textContent = 'Generar Ticket (PNG)';
-                    btnGenerarTicket.disabled = false;
-                    alert('✅ Ticket PNG generado y descargado exitosamente');
-                }, 1500);
+                btnGenerarTicket.textContent = 'Descargando imagen...';
+                // 🔥 CORREGIDO: descarga REAL del PNG (antes abría el ticket HTML).
+                // Se pide la imagen por fetch y se guarda como archivo .png,
+                // sin abrir ninguna ventana de impresión.
+                descargarTicketPng(ventaId, numeroTicket)
+                    .then(() => {
+                        limpiarVenta();
+                        btnGenerarTicket.textContent = 'Generar Ticket (PNG)';
+                        btnGenerarTicket.disabled = false;
+                        alert('✅ Imagen del ticket descargada. Ya puedes enviarla al cliente.');
+                    })
+                    .catch(err => {
+                        btnGenerarTicket.textContent = 'Generar Ticket (PNG)';
+                        btnGenerarTicket.disabled = false;
+                        alert('❌ No se pudo descargar la imagen: ' + err.message +
+                              '\n\nLa venta SÍ quedó registrada (ticket N° ' + numeroTicket + ').');
+                    });
             })
             .catch(err => {
                 alert('❌ Error: ' + err.message);

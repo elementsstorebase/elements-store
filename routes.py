@@ -370,7 +370,12 @@ def generar_texto_ticket(venta):
     configs = {}
     for clave in claves:
         cfg = Configuracion.query.filter_by(clave=clave).first()
-        configs[clave] = cfg.valor if cfg else None
+        # 🔥 CORREGIDO: si la configuración no existe (o está vacía) NO se guarda
+        # la clave, para que el .get(clave, 'valor_por_defecto') de abajo pueda
+        # aplicar su valor por defecto. Antes se guardaba None y reventaba con
+        # AttributeError: 'NoneType' object has no attribute 'lower' (error 500).
+        if cfg is not None and cfg.valor is not None:
+            configs[clave] = cfg.valor
 
     tienda_nombre = normalizar_texto(configs.get('ticket_tienda_nombre', 'ELEMENTS STORE'))
     rif = normalizar_texto(configs.get('ticket_rif', 'J-12345678-9'))
@@ -3338,7 +3343,12 @@ def generar_ticket_imagen(venta_id):
     configs = {}
     for clave in claves:
         cfg = Configuracion.query.filter_by(clave=clave).first()
-        configs[clave] = cfg.valor if cfg else None
+        # 🔥 CORREGIDO: si la configuración no existe (o está vacía) NO se guarda
+        # la clave, para que el .get(clave, 'valor_por_defecto') de abajo pueda
+        # aplicar su valor por defecto. Antes se guardaba None y reventaba con
+        # AttributeError: 'NoneType' object has no attribute 'lower' (error 500).
+        if cfg is not None and cfg.valor is not None:
+            configs[clave] = cfg.valor
     
     tienda_nombre = configs.get('ticket_tienda_nombre', 'ELEMENTS STORE')
     rif = configs.get('ticket_rif', 'J-12345678-9')
