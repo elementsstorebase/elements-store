@@ -2512,6 +2512,79 @@ def registrar_venta():
     except Exception as e:
         print(f"⚠️ Error al imprimir ticket automático (POS-58): {e}")
 
+    # ============================================================
+    # PAYLOAD PARA IMPRESIÓN WebUSB / PNG (estructura que espera impresion_usb.js)
+    # ============================================================
+    try:
+        if venta.fecha.tzinfo is None:
+            _fecha_local = pytz.UTC.localize(venta.fecha).astimezone(pytz.timezone('America/Caracas'))
+        else:
+            _fecha_local = venta.fecha.astimezone(pytz.timezone('America/Caracas'))
+        _fecha_fmt = _fecha_local.strftime('%d/%m/%Y %I:%M %p')
+    except Exception:
+        _fecha_fmt = ''
+
+    _claves_ticket = [
+        'ticket_tienda_nombre', 'ticket_rif', 'ticket_telefono_tienda', 'ticket_direccion_tienda',
+        'ticket_mostrar_rif', 'ticket_mostrar_telefono', 'ticket_mostrar_direccion_cliente',
+        'ticket_mostrar_direccion_tienda', 'ticket_mensaje', 'ticket_url',
+        'ticket_subtotal_usd', 'ticket_iva_porcentaje'
+    ]
+    _cfg = {}
+    for _clave in _claves_ticket:
+        _c = Configuracion.query.filter_by(clave=_clave).first()
+        _cfg[_clave] = _c.valor if _c else None
+
+    config_ticket_usb = {
+        'nombre_tienda': _cfg.get('ticket_tienda_nombre') or 'ELEMENTS STORE',
+        'rif': _cfg.get('ticket_rif') or '',
+        'telefono_tienda': _cfg.get('ticket_telefono_tienda') or '',
+        'direccion_tienda': _cfg.get('ticket_direccion_tienda') or '',
+        'mostrar_rif': (_cfg.get('ticket_mostrar_rif') or 'true').lower() == 'true',
+        'mostrar_telefono': (_cfg.get('ticket_mostrar_telefono') or 'true').lower() == 'true',
+        'mostrar_direccion_tienda': (_cfg.get('ticket_mostrar_direccion_tienda') or 'true').lower() == 'true',
+        'mostrar_direccion_cliente': (_cfg.get('ticket_mostrar_direccion_cliente') or 'true').lower() == 'true',
+        'mostrar_subtotal_usd': (_cfg.get('ticket_subtotal_usd') or 'false').lower() == 'true',
+        'porcentaje_iva': iva_porcentaje,
+        'mensaje_agradecimiento': _cfg.get('ticket_mensaje') or '¡Gracias por su compra!',
+        'url_web': _cfg.get('ticket_url') or '',
+        'mostrar_url_web': bool(_cfg.get('ticket_url'))
+    }
+
+    detalles_usb = []
+    for det in venta.detalles:
+        _prod = det.producto
+        detalles_usb.append({
+            'nombre_producto': _prod.nombre if _prod else 'Producto eliminado',
+            'cantidad': det.cantidad,
+            'precio_unitario_efectivo_usd': det.precio_unitario_usd,
+            'precio_unitario_ves': det.precio_unitario_ves,
+            'total_linea_usd': round(det.precio_unitario_usd * det.cantidad, 2),
+            'descuento_porcentaje': det.descuento_porcentaje or 0
+        })
+
+    cliente_usb = {
+        'nombre_completo': f"{cliente.nombre} {cliente.apellido}".strip() if cliente else 'Consumidor Final',
+        'cedula': cliente.cedula if cliente else '',
+        'telefono': cliente.telefono if cliente else '',
+        'direccion': cliente.direccion if cliente else ''
+    }
+
+    venta_usb = {
+        'id': venta.id,
+        'numero_ticket': venta.numero_ticket,
+        'fecha_formateada': _fecha_fmt,
+        'total_usd': venta.total_usd,
+        'subtotal_usd': venta.subtotal_usd,
+        'subtotal_ves': venta.subtotal_ves,
+        'total_ves': venta.total_ves,
+        'tasa_bcv': venta.tasa_bcv_usd,
+        'metodo_pago': venta.metodo_pago,
+        'metodo_cobro': venta.metodo_cobro,
+        'moneda_cobro': venta.moneda_cobro,
+        'total_cobro': venta.total_cobro
+    }
+
     return jsonify({
         'mensaje': 'Venta registrada',
         'venta_id': venta.id,
@@ -2522,7 +2595,11 @@ def registrar_venta():
         'metodo_cobro': metodo_cobro,
         'moneda_cobro': moneda_cobro,
         'total_cobro': total_cobro,
-        'ticket': ticket_path
+        'ticket': ticket_path,
+        'venta': venta_usb,
+        'detalles': detalles_usb,
+        'cliente': cliente_usb,
+        'config_ticket': config_ticket_usb
     }), 201
 
 # ============================================================
